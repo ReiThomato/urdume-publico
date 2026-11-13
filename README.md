@@ -48,16 +48,18 @@ the opposite route:
 
 <table>
   <tr>
-    <td align="center"><img src="docs/img/01-hoje.png" width="200" alt="Today screen" /><br /><sub>Today</sub></td>
-    <td align="center"><img src="docs/img/02-tarefas.png" width="200" alt="Tasks screen" /><br /><sub>Tasks</sub></td>
-    <td align="center"><img src="docs/img/03-projetos.png" width="200" alt="Projects screen" /><br /><sub>Projects</sub></td>
+    <td align="center"><img src="docs/img/02-hoje.png" width="200" alt="Today screen" /><br /><sub>Today</sub></td>
+    <td align="center"><img src="docs/img/03-tarefas.png" width="200" alt="Tasks screen" /><br /><sub>Tasks</sub></td>
+    <td align="center"><img src="docs/img/04-projetos.png" width="200" alt="Projects screen" /><br /><sub>Projects</sub></td>
   </tr>
   <tr>
-    <td align="center"><img src="docs/img/04-agenda.png" width="200" alt="Calendar screen" /><br /><sub>Calendar</sub></td>
-    <td align="center"><img src="docs/img/05-habitos.png" width="200" alt="Habits screen" /><br /><sub>Habits</sub></td>
-    <td align="center"><img src="docs/img/06-jarvis.png" width="200" alt="Jarvis assistant screen" /><br /><sub>Jarvis</sub></td>
+    <td align="center"><img src="docs/img/05-agenda.png" width="200" alt="Calendar screen" /><br /><sub>Calendar</sub></td>
+    <td align="center"><img src="docs/img/06-habitos.png" width="200" alt="Habits screen" /><br /><sub>Habits</sub></td>
+    <td align="center"><img src="docs/img/07-ajustes.png" width="200" alt="Settings screen" /><br /><sub>Settings</sub></td>
   </tr>
 </table>
+
+<sub>Screenshots from the Android build, in Portuguese.</sub>
 
 ## What it does
 
@@ -81,6 +83,12 @@ accept or reject; the model never writes to the database directly.
 There are silent, manual and paused modes, plus a local monthly spending cap
 based on a price table in the code. The cap is a local guard, not a guarantee
 about your provider invoice.
+
+<p align="center">
+  <img src="docs/img/08-projeto.png" width="260" alt="Project detail: progress, milestones, tasks and dated notes" />
+  <br />
+  <sub>Project detail: progress, milestones, tasks and dated notes.</sub>
+</p>
 
 ## What it does not do
 

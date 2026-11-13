@@ -7,11 +7,11 @@ IA que roda **na sua chave**. Sem conta, sem servidor do autor, sem telemetria.
 
 | Hoje | Tarefas | Projetos |
 | --- | --- | --- |
-| ![Hoje](docs/img/01-hoje.png) | ![Tarefas](docs/img/02-tarefas.png) | ![Projetos](docs/img/03-projetos.png) |
+| ![Hoje](docs/img/02-hoje.png) | ![Tarefas](docs/img/03-tarefas.png) | ![Projetos](docs/img/04-projetos.png) |
 
-| Agenda | Hábitos | Jarvis |
+| Agenda | Hábitos | Ajustes |
 | --- | --- | --- |
-| ![Agenda](docs/img/04-agenda.png) | ![Hábitos](docs/img/05-habitos.png) | ![Jarvis](docs/img/06-jarvis.png) |
+| ![Agenda](docs/img/05-agenda.png) | ![Hábitos](docs/img/06-habitos.png) | ![Ajustes](docs/img/07-ajustes.png) |
 
 > ## ⚠️ Beta
 >
