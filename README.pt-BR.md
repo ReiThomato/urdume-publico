@@ -41,6 +41,15 @@ manual), prazo, marcos e anotações datadas. Cinco critérios de ordenação.
 **propõe** ações (criar tarefa, marcar hábito, anotar num projeto). Nada é
 executado sem a sua confirmação, e cada ação pode ser desfeita.
 
+<p align="center">
+  <img src="docs/img/09-jarvis-conversa.png" width="200" alt="Tela de conversa do Jarvis, com tarefas de exemplo" />
+  <img src="docs/img/10-jarvis-ajustes.png" width="200" alt="Ajustes do Jarvis: provedor, pista da chave e teto mensal" />
+  <br />
+  <sub>As telas reais: a conversa e a configuração em <strong>Ajustes → Jarvis</strong>
+  (provedor, pista da chave e teto mensal). Dados de exemplo — nenhuma chamada
+  real a provedor nesta captura.</sub>
+</p>
+
 ![Projeto](docs/img/08-projeto.png)
 
 ---

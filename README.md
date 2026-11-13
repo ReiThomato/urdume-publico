@@ -85,6 +85,15 @@ based on a price table in the code. The cap is a local guard, not a guarantee
 about your provider invoice.
 
 <p align="center">
+  <img src="docs/img/09-jarvis-conversa.png" width="200" alt="Jarvis conversation screen with example tasks" />
+  <img src="docs/img/10-jarvis-ajustes.png" width="200" alt="Jarvis settings: provider, key hint and monthly cap" />
+  <br />
+  <sub>The real screens: conversation, and Settings → Jarvis (provider, key hint
+  and monthly cap). Sample tasks and an example key — no live provider call in
+  this capture.</sub>
+</p>
+
+<p align="center">
   <img src="docs/img/08-projeto.png" width="260" alt="Project detail: progress, milestones, tasks and dated notes" />
   <br />
   <sub>Project detail: progress, milestones, tasks and dated notes.</sub>
