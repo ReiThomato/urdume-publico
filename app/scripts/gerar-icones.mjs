@@ -217,5 +217,5 @@ for (const [exportado, lucideNome] of Object.entries(MAPA)) {
 	linhas.push(`}`)
 }
 
-await writeFile('/home/srhyago/Documentos/Nexo/app/src/ui/icones.tsx', linhas.join('\n') + '\n')
+await writeFile(new URL('../src/ui/icones.tsx', import.meta.url), linhas.join('\n') + '\n')
 console.log('gerado:', Object.keys(MAPA).length, 'ícones')
