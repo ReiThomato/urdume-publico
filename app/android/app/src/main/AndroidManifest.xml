@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application
+        android:allowBackup="false"
+        android:networkSecurityConfig="@xml/rede_segura"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/regras_de_dados"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Jarvis: notificações locais e reagendamento após reiniciar o aparelho.
+         POST_NOTIFICATIONS é pedido em tempo de execução no Android 13+; sem
+         a permissão o app continua funcionando, só não avisa.
+         RECEIVE_BOOT_COMPLETED faz o agendamento voltar depois de desligar.
+         SCHEDULE_EXACT_ALARM é OPCIONAL e não vem concedida em instalações
+         novas: sem ela o alarme atrasa, mas não falha. A tela de controle
+         explica isso em vez de prometer pontualidade que o Android não dá. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- O plugin do runner declara localização porque TAMBÉM oferece
+         geolocalização. O Jarvis não usa localização em momento nenhum, e uma
+         permissão pedida sem motivo é o tipo de coisa que faz o usuário negar
+         tudo por desconfiança. Elas são removidas do manifesto final. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" tools:node="remove" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+
+    <!--
+      USE_EXACT_ALARM — a diferença entre avisar e não avisar.
+
+      Medido no Redmi 12 (MIUI, Android 15) em 12/11/2026:
+
+        alarme exato   → entregue no minuto marcado, com o app fechado e a tela
+                         bloqueada;
+        alarme inexato → reagendado pelo MIUI para +2d23h, ou seja, nunca.
+
+      Sem esta permissão, `canScheduleExactAlarms()` volta falso e o plugin cai
+      no `setAndAllowWhileIdle`. Em aparelho com gerenciamento de bateria
+      agressivo, "alguns minutos de atraso" viram três dias.
+
+      Diferente de SCHEDULE_EXACT_ALARM, esta é concedida na INSTALAÇÃO: não
+      abre tela de Ajustes, não depende de o usuário achar o interruptor e não
+      pode ser revogada por falta de uso. O Android limita a permissão a apps de
+      alarme, relógio e agenda — que é exatamente o caso de um app de tarefas,
+      prazos e hábitos. Fora da Play Store não há declaração de política a
+      fazer; o APK é instalado pelo próprio usuário.
+    -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!--
+      Pedir isenção de otimização de bateria (pedida em tempo de execução, com
+      a tela do sistema). Sem isso o MIUI coloca o app no bucket "rare" e o
+      trabalho periódico do runner passa a rodar quando quer.
+    -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+</manifest>

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Política de rede em texto claro (HTTP).
+
+    ## Por que este arquivo existe
+
+    Medido no aparelho, ao ligar a sincronização com o servidor caseiro:
+
+        java.io.IOException: Cleartext HTTP traffic to 127.0.0.1 not permitted
+
+    O WebView abre o app em http://localhost porque o Capacitor declara essa
+    origem como segura. Mas o cliente HTTP nativo (`CapacitorHttp`) usa o
+    OkHttp do sistema, que aplica a política do Android: desde a API 28, HTTP
+    sem TLS é proibido por padrão. Sem exceção, a sincronização não conecta.
+
+    ## Por que a exceção é ampla, e não por domínio
+
+    Tentei o caminho restrito primeiro: `base-config` com HTTP proibido e uma
+    lista de domínios liberados. Não funciona para o caso real.
+
+    O servidor do usuário é caseiro: ele pode estar em `192.168.0.10`, em
+    `10.0.0.5`, no IP do Tailscale (`100.x.x.x`) ou no celular. O Android
+    aceita IPs literais nessa lista, mas **não aceita faixas** — seria preciso
+    saber de antemão o IP de cada rede em que o usuário vai estar. Um endereço
+    novo exigiria um APK novo. Isso não é configuração, é adivinhação.
+
+    Então a política é: HTTP é permitido porque o app é cliente de um servidor
+    que o usuário hospeda, e servidor caseiro fala HTTP.
+
+    ## O que isso custa, dito sem eufemismo
+
+    Um atacante na mesma rede Wi-Fi pode ler o tráfego HTTP — inclusive o
+    token — com um sniffer. O que reduz o risco:
+
+    - o token é revogável em um toque no painel, e o app só pede
+      `files:read` e `files:write` (não `admin`, não `files:delete`);
+    - fora de casa, o caminho é Tailscale (WireGuard) ou o domínio com TLS,
+      ambos criptografados;
+    - o servidor não deve ficar exposto à internet sem TLS.
+
+    Ou seja: HTTP em rede local confiável é aceitável; HTTP na internet pública
+    não é, e o app não incentiva — o campo sugere `https://` para domínio.
+
+    ## O que este arquivo NÃO faz
+
+    Não criptografa nada. Quem quiser TLS de verdade usa o domínio com
+    certificado (o Redmi Cloud já suporta) ou o Tailscale.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

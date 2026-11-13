@@ -1,0 +1,1937 @@
+/* ---------------------------------------------------------------------------
+   Conteúdo das telas: tarefas, calendário, hábitos, progresso, páginas.
+   Tudo na mesma gramática: chip de lista → cartão → linha. Tom de categoria
+   entra por `--cor-cat`, publicado pelo React no elemento.
+   --------------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------ cabeçalho do dia */
+
+.tira-dias {
+	display: flex;
+	gap: 6px;
+	/* Um respiro a mais depois da fita: os números colavam no primeiro texto
+	   do painel logo abaixo. */
+	padding: var(--s-1) var(--s-4) var(--s-4);
+	overflow-x: auto;
+	scrollbar-width: none;
+	/* Mesmo defeito que a faixa de chips tinha: sem `width`, um contêiner flex
+	   com filhos de largura mínima assume largura de conteúdo e passa do
+	   viewport. Em 360px a tira empurrava o documento para os lados. */
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	overscroll-behavior-x: contain;
+}
+
+.tira-dias::-webkit-scrollbar {
+	display: none;
+}
+
+.tira-dia {
+	position: relative;
+	/* Largura fixa e sem crescer: com 14 dias a fita precisa rolar, e `flex: 1`
+	   fazia todos caberem apertados em vez de rolar. */
+	flex: 0 0 auto;
+	width: 52px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	min-height: 62px;
+	padding: var(--s-1) 4px;
+	border-radius: var(--r-lg);
+	background: var(--surface-container);
+	color: var(--on-surface-variant);
+	transition:
+		background var(--dur) var(--ease),
+		color var(--dur) var(--ease),
+		transform var(--dur-fast) var(--ease);
+}
+
+.tira-dia__semana {
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.tira-dia__numero {
+	font-size: 19px;
+	font-weight: var(--w-heavy);
+	line-height: 1;
+	letter-spacing: -0.03em;
+	color: var(--on-surface);
+	font-variant-numeric: tabular-nums;
+}
+
+.tira-dia--atual {
+	background: var(--primary);
+	color: var(--on-primary);
+}
+
+.tira-dia--atual .tira-dia__numero,
+.tira-dia--atual .tira-dia__semana {
+	color: var(--on-primary);
+}
+
+.tira-dia:active {
+	transform: scale(0.96);
+}
+
+.tira-dia__marca {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: currentColor;
+	opacity: 0;
+}
+
+/* Dia com tarefa ganha o ponto visível: no histórico do mês, isso mostra onde
+   houve movimento sem precisar abrir cada dia. O dia escolhido e o de hoje
+   continuam com marca cheia. */
+.tira-dia__marca[data-tem='sim'] {
+	opacity: 0.55;
+}
+
+/* O dia escolhido (diferente de hoje) ganha contorno, não preenchimento: o
+   preenchimento é o sinal de "hoje", e misturar os dois confundiria. */
+.tira-dia--escolhido {
+	box-shadow: inset 0 0 0 2px var(--primary);
+	color: var(--primary);
+}
+
+.tira-dia--escolhido .tira-dia__numero {
+	color: var(--primary);
+}
+
+.tira-dia--escolhido .tira-dia__marca {
+	opacity: 1;
+}
+
+.tira-dia--atual .tira-dia__marca {
+	background: var(--on-primary);
+	opacity: 1;
+}
+
+/* ------------------------------------------------------------------- tarefas */
+
+.tarefa {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-1);
+	padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+	transition: background var(--dur) var(--ease);
+	/* O bloco de subtarefas ocupa a linha inteira abaixo do conteúdo. */
+	flex-wrap: wrap;
+}
+
+/* Separador entre tarefas do mesmo grupo. Antes cada tarefa era um cartão de
+   fundo próprio e a lista virava uma pilha de blocos; com uma linha fina, o
+   grupo lê como lista — que é o que ele é. */
+.tarefa + .tarefa {
+	box-shadow: inset 0 1px 0 color-mix(in srgb, var(--outline-variant) 55%, transparent);
+}
+
+/* A barra lateral é a cor da lista: identifica sem precisar ler o chip.
+   Tarefa com prioridade troca a barra pela cor da prioridade e engrossa:
+   é o sinal que se vê de relance numa lista longa. */
+.tarefa::before {
+	content: '';
+	position: absolute;
+	left: 4px;
+	top: var(--s-3);
+	bottom: var(--s-3);
+	width: 3px;
+	border-radius: var(--r-pill);
+	background: var(--cor-cat, transparent);
+	opacity: 0.85;
+	transition:
+		background var(--dur) var(--ease),
+		width var(--dur) var(--ease);
+}
+
+.tarefa[data-prioridade='1']::before {
+	background: var(--prioridade-1);
+	width: 3px;
+}
+
+.tarefa[data-prioridade='2']::before {
+	background: var(--prioridade-2);
+	width: 4px;
+}
+
+.tarefa[data-prioridade='3']::before {
+	background: var(--prioridade-3);
+	width: 5px;
+}
+
+.tarefa--feita::before {
+	opacity: 0.3;
+}
+
+.tarefa__corpo {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+	padding-top: 5px;
+	padding-bottom: 5px;
+	text-align: left;
+}
+
+.tarefa__linha-titulo {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	min-width: 0;
+}
+
+/* Bandeira da prioridade, à esquerda do título. Fica na linha do texto e não
+   na meta: é o primeiro lugar onde o olho procura o estado da tarefa. */
+.tarefa__prioridade-marca {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	margin-top: 2px;
+	color: var(--prioridade-3);
+}
+
+.tarefa__prioridade-marca[data-prioridade='1'] {
+	color: var(--prioridade-1);
+}
+
+.tarefa__prioridade-marca[data-prioridade='2'] {
+	color: var(--prioridade-2);
+}
+
+.tarefa__prioridade-marca[data-prioridade='3'] {
+	color: var(--prioridade-3);
+}
+
+.tarefa__titulo {
+	font-size: var(--text-body);
+	font-weight: var(--w-semibold);
+	line-height: 1.3;
+	letter-spacing: -0.005em;
+	color: var(--on-surface);
+	overflow-wrap: anywhere;
+}
+
+/* Alta prioridade ganha peso na própria letra: cor sozinha não basta para quem
+   não distingue matizes, e a diferença de peso funciona em qualquer tela. */
+.tarefa[data-prioridade='3']:not(.tarefa--feita) .tarefa__titulo {
+	font-weight: var(--w-bold);
+}
+
+.tarefa--feita .tarefa__titulo {
+	color: var(--on-surface-variant);
+	text-decoration: line-through;
+	text-decoration-thickness: 1.5px;
+}
+
+.tarefa__meta {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	flex-wrap: wrap;
+	font-size: var(--text-sm);
+	color: var(--on-surface-variant);
+}
+
+.tarefa__hora {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-variant-numeric: tabular-nums;
+	font-weight: var(--w-semibold);
+}
+
+.tarefa__lista {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-weight: var(--w-semibold);
+}
+
+.tarefa__lista::before {
+	content: '';
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--cor-cat);
+}
+
+.tarefa__progresso {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-weight: var(--w-semibold);
+}
+
+.tarefa__acoes {
+	display: flex;
+	align-items: center;
+	padding-top: 2px;
+	gap: 0;
+}
+
+/* Atalhos de editar e excluir: aparecem sempre (não só no hover, que não existe
+   no celular). Reduzidos para 32 px na revisão de densidade — com três ações de
+   36 px a coluna de ações roubava 108 px do título na largura de um celular;
+   o alvo de toque real continua 44 px pelo espaçamento ao redor. */
+.tarefa__atalho {
+	width: 32px;
+	height: 32px;
+	color: var(--on-surface-variant);
+}
+
+.tarefa__atalho--apagar:hover {
+	color: var(--error);
+}
+
+@media (min-width: 900px) {
+	.tarefa__atalho {
+		width: 36px;
+		height: 36px;
+	}
+}
+
+/* Convite para criar o primeiro passo, no lugar da frase "Sem passos…". */
+.subtarefas__vazio {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	min-height: 40px;
+	padding: 0 var(--s-2);
+	border-radius: var(--r-md);
+	color: var(--primary);
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	text-align: left;
+}
+
+.subtarefas__vazio:active {
+	background: var(--surface-container-high);
+}
+
+/* Subtarefas dentro da linha, recuadas e sem borda. */
+.subtarefas {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	width: 100%;
+	margin: 0 var(--s-3) var(--s-2) calc(var(--s-4) + 36px);
+	padding: var(--s-2);
+	border-radius: var(--r-lg);
+	background: var(--surface-container-low);
+}
+
+.subtarefa {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	min-height: 40px;
+	padding: 2px var(--s-2) 2px 0;
+}
+
+.subtarefa__titulo {
+	flex: 1;
+	font-size: var(--text-sm);
+	color: var(--on-surface);
+}
+
+.subtarefa__titulo--feita {
+	color: var(--on-surface-variant);
+	text-decoration: line-through;
+}
+
+.subtarefas__form {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	padding-top: var(--s-1);
+}
+
+.subtarefas__form .campo {
+	min-height: 40px;
+	background: transparent;
+}
+
+.subtarefas__form .campo:focus {
+	background: var(--surface-container-high);
+}
+
+/* -------------------------------------------------------------- barra de ordem */
+
+.barra-ordem {
+	display: flex;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-4);
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.barra-ordem::-webkit-scrollbar {
+	display: none;
+}
+
+/* ----------------------------------------------------------------- calendário */
+
+.calendario {
+	margin: 0 var(--s-4);
+	padding: var(--s-3) var(--s-2) var(--s-2);
+	border-radius: var(--r-2xl);
+	background: var(--surface-container);
+}
+
+.calendario__cabecalho {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	padding: 0 var(--s-2) var(--s-2);
+}
+
+.calendario__mes-botao {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	flex: 1;
+	min-width: 0;
+	min-height: 44px;
+	padding: 0 var(--s-2);
+	border-radius: var(--r-pill);
+	color: var(--on-surface);
+	font-size: 19px;
+	font-weight: var(--w-bold);
+	letter-spacing: -0.03em;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.calendario__mes-botao:active {
+	background: var(--surface-container-high);
+}
+
+.calendario__salto {
+	display: flex;
+	gap: var(--s-2);
+	padding: 0 var(--s-2) var(--s-3);
+}
+
+.calendario__salto .campo {
+	flex: 1;
+}
+
+.calendario__semana {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 2px;
+	padding: 0 2px var(--s-1);
+}
+
+.calendario__semana span {
+	text-align: center;
+	font-size: 11px;
+	font-weight: var(--w-bold);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--on-surface-variant);
+}
+
+.calendario__grade {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 2px;
+	padding: 0 2px 2px;
+}
+
+.dia {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	/* Altura confortável de toque: 44 px de alvo, sem apertar a grade. */
+	min-height: 44px;
+	border-radius: var(--r-sm);
+	background: transparent;
+	color: var(--on-surface);
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+	font-variant-numeric: tabular-nums;
+	transition:
+		background var(--dur) var(--ease),
+		color var(--dur) var(--ease);
+}
+
+.dia--fora {
+	color: var(--on-surface-variant);
+	opacity: 0.45;
+}
+
+.dia--hoje {
+	color: var(--primary);
+	font-weight: var(--w-heavy);
+	box-shadow: inset 0 0 0 2px var(--primary);
+}
+
+.dia--selecionado {
+	background: var(--primary);
+	color: var(--on-primary);
+	box-shadow: none;
+}
+
+.dia--selecionado.dia--hoje {
+	background: var(--primary);
+}
+
+.dia:active {
+	background: var(--surface-container-highest);
+}
+
+.dia__pontos {
+	display: flex;
+	gap: 3px;
+	height: 5px;
+	align-items: center;
+}
+
+.dia__pontos i {
+	width: 5px;
+	height: 5px;
+	border-radius: 50%;
+	background: var(--primary);
+	display: block;
+}
+
+.dia--selecionado .dia__pontos i {
+	background: var(--on-primary);
+}
+
+/* Linha do dia (régua de horas). */
+.agenda-dia {
+	position: relative;
+	padding: var(--s-3);
+}
+
+.agenda-dia__regua {
+	position: relative;
+	margin-left: 44px;
+}
+
+.agenda-dia__hora {
+	position: absolute;
+	left: -44px;
+	right: 0;
+	height: 0;
+	border-top: 1px solid var(--outline-variant);
+	opacity: 0.5;
+}
+
+.agenda-dia__hora span {
+	position: absolute;
+	left: 0;
+	top: -8px;
+	width: 36px;
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+	font-variant-numeric: tabular-nums;
+}
+
+.agenda-bloco {
+	position: absolute;
+	left: 0;
+	right: var(--s-2);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	gap: 0;
+	padding: 3px var(--s-2);
+	border-radius: var(--r-sm);
+	background: color-mix(in srgb, var(--cor-cat, var(--primary)) 18%, var(--surface-container));
+	border-left: 3px solid var(--cor-cat, var(--primary));
+	overflow: hidden;
+	text-align: left;
+}
+
+.agenda-bloco--evento {
+	background: color-mix(in srgb, var(--cor-cat, var(--tertiary)) 22%, var(--surface-container));
+}
+
+/* Hora e título na MESMA linha.
+   Antes eram duas linhas empilhadas: num bloco de 30 min (28 px de altura) a
+   segunda ficava cortada por `overflow: hidden` e o evento aparecia só como
+   "09:00", sem dizer o que era. O título vem primeiro porque é a informação;
+   a hora é a moldura. */
+.agenda-bloco {
+	flex-direction: row;
+	align-items: center;
+	gap: 8px;
+}
+
+.agenda-bloco__hora {
+	order: 2;
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+	font-variant-numeric: tabular-nums;
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.agenda-bloco__titulo {
+	order: 1;
+	flex: 1;
+	min-width: 0;
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	color: var(--on-surface);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.agenda-bloco__titulo--feita {
+	text-decoration: line-through;
+	color: var(--on-surface-variant);
+}
+
+.agenda-sem-hora {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--s-2);
+	padding: 0 var(--s-3) var(--s-2);
+}
+
+.pilula-tarefa {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 36px;
+	padding: 0 var(--s-3);
+	border-radius: var(--r-pill);
+	background: color-mix(in srgb, var(--cor-cat, var(--primary)) 16%, var(--surface-container));
+	color: var(--on-surface);
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+}
+
+.pilula-tarefa::before {
+	content: '';
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--cor-cat, var(--primary));
+}
+
+/* ------------------------------------------------------------------ hábitos */
+
+.habito {
+	position: relative;
+	padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+	border-radius: var(--r-2xl);
+	background: var(--surface-container);
+	transition:
+		background var(--dur) var(--ease),
+		transform var(--dur-fast) var(--ease);
+}
+
+.habito--feito {
+	background: color-mix(in srgb, var(--cor-cat, var(--primary)) 20%, var(--surface-container));
+}
+
+.habito--fora {
+	opacity: 0.6;
+}
+
+.habito__cabecalho {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+}
+
+.habito__marca {
+	display: grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	border-radius: var(--r-md);
+	flex-shrink: 0;
+	background: color-mix(in srgb, var(--cor-cat, var(--primary)) 22%, transparent);
+	color: var(--cor-cat, var(--primary));
+	transition:
+		background var(--dur) var(--ease),
+		color var(--dur) var(--ease),
+		transform var(--dur) var(--ease-spring);
+}
+
+.habito--feito .habito__marca {
+	background: var(--cor-cat, var(--primary));
+	color: var(--on-primary);
+}
+
+.habito__marca:active {
+	transform: scale(0.9);
+}
+
+.habito__texto {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.habito__titulo {
+	font-size: var(--text-body);
+	font-weight: var(--w-bold);
+	letter-spacing: -0.01em;
+	color: var(--on-surface);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.habito__descricao {
+	font-size: var(--text-sm);
+	color: var(--on-surface-variant);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.habito__numeros {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	flex-shrink: 0;
+	color: var(--on-surface-variant);
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	font-variant-numeric: tabular-nums;
+}
+
+.habito__sequencia {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	color: var(--tertiary);
+}
+
+.habito__meta {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+}
+
+/* Semana do hábito: 7 células clicáveis, com o dia de hoje marcado. */
+.habito__semana {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 4px;
+	margin-top: var(--s-3);
+}
+
+.habito__dia {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	min-height: 46px;
+	padding: 4px 0;
+	border-radius: var(--r-md);
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	color: var(--on-surface-variant);
+	transition:
+		background var(--dur) var(--ease),
+		color var(--dur) var(--ease);
+}
+
+.habito__dia-letra {
+	opacity: 0.7;
+}
+
+.habito__dia-numero {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border-radius: var(--r-pill);
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	font-variant-numeric: tabular-nums;
+	color: var(--on-surface);
+}
+
+.habito__dia--feito .habito__dia-numero {
+	background: var(--cor-cat, var(--primary));
+	color: var(--on-primary);
+}
+
+.habito__dia--hoje .habito__dia-numero {
+	box-shadow: inset 0 0 0 2px var(--cor-cat, var(--primary));
+}
+
+.habito__dia--fora {
+	opacity: 0.35;
+}
+
+.habito__dia--futuro {
+	opacity: 0.5;
+}
+
+.habito__dia--hoje {
+	background: var(--surface-container-high);
+}
+
+/* Heatmap: 35 dias em grade, intensidade = valor registrado. */
+.heatmap {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 4px;
+}
+
+.heatmap__celula {
+	aspect-ratio: 1;
+	border-radius: 6px;
+	background: var(--surface-container-high);
+}
+
+.heatmap__celula--n1 {
+	background: color-mix(in srgb, var(--cor-cat, var(--primary)) 30%, transparent);
+}
+
+.heatmap__celula--n2 {
+	background: color-mix(in srgb, var(--cor-cat, var(--primary)) 55%, transparent);
+}
+
+.heatmap__celula--n3 {
+	background: color-mix(in srgb, var(--cor-cat, var(--primary)) 80%, transparent);
+}
+
+.heatmap__celula--n4 {
+	background: var(--cor-cat, var(--primary));
+}
+
+/* ----------------------------------------------------------------- progresso */
+
+.progresso {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-4);
+	padding: var(--s-4);
+}
+
+.progresso__numeros {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: var(--s-2);
+}
+
+.progresso__numero {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	padding: var(--s-3) var(--s-2);
+	border-radius: var(--r-lg);
+	background: var(--surface-container-high);
+	text-align: center;
+}
+
+.progresso__valor {
+	font-size: 26px;
+	font-weight: var(--w-heavy);
+	line-height: 1.05;
+	letter-spacing: -0.04em;
+	color: var(--on-surface);
+	font-variant-numeric: tabular-nums;
+}
+
+.progresso__valor--alerta {
+	color: var(--error);
+}
+
+.progresso__rotulo {
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+}
+
+.progresso__barras {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--s-2);
+	height: 96px;
+}
+
+.progresso__barra-area {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 4px;
+	height: 100%;
+}
+
+.progresso__barra {
+	width: 100%;
+	max-width: 40px;
+	border-radius: var(--r-sm) var(--r-sm) 4px 4px;
+	background: var(--primary);
+	min-height: 6px;
+	transition: height var(--dur-slow) var(--ease-emphasized);
+}
+
+.progresso__barra--zero {
+	background: var(--surface-container-highest);
+}
+
+.progresso__dia {
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	color: var(--on-surface-variant);
+}
+
+.anel {
+	display: grid;
+	place-items: center;
+	position: relative;
+	width: 120px;
+	height: 120px;
+	flex-shrink: 0;
+}
+
+.anel__centro {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+}
+
+.anel__valor {
+	font-size: 26px;
+	font-weight: var(--w-heavy);
+	letter-spacing: -0.04em;
+	color: var(--on-surface);
+	font-variant-numeric: tabular-nums;
+}
+
+.anel__rotulo {
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+}
+
+.sequencia {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	color: var(--tertiary);
+	font-weight: var(--w-bold);
+}
+
+/* ------------------------------------------------------------------ páginas */
+
+.pagina-linha {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	flex: 1;
+	min-width: 0;
+	min-height: 64px;
+	padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+}
+
+.pagina-linha__icone {
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border-radius: var(--r-md);
+	background: var(--tertiary-container);
+	color: var(--on-tertiary-container);
+	flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------- busca */
+
+.busca__campo {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-4);
+}
+
+.busca__grupo {
+	margin: 0 var(--s-4) var(--s-4);
+}
+
+.busca__grupo-titulo {
+	padding: 0 var(--s-2) var(--s-2);
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--on-surface-variant);
+}
+
+.busca__resultado {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	width: 100%;
+	min-height: 52px;
+	padding: var(--s-2) var(--s-4);
+	text-align: left;
+}
+
+.busca__resultado + .busca__resultado {
+	border-top: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+}
+
+.busca__resultado-titulo {
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface);
+}
+
+.busca__resultado-detalhe {
+	font-size: var(--text-xs);
+	color: var(--on-surface-variant);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------- ajustes */
+
+.grupo-ajustes {
+	margin: 0 var(--s-4) var(--s-4);
+}
+
+.linha-ajuste {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	min-height: 64px;
+	padding: var(--s-3) var(--s-4);
+}
+
+.linha-ajuste + .linha-ajuste {
+	border-top: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+}
+
+.linha-ajuste__texto {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.linha-ajuste__titulo {
+	font-size: var(--text-body);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface);
+}
+
+.linha-ajuste__descricao {
+	font-size: var(--text-sm);
+	color: var(--on-surface-variant);
+	line-height: 1.4;
+}
+
+.aviso {
+	display: flex;
+	gap: var(--s-2);
+	margin: var(--s-2) var(--s-4);
+	padding: var(--s-3) var(--s-4);
+	border-radius: var(--r-md);
+	font-size: var(--text-sm);
+	font-weight: var(--w-medium);
+}
+
+.aviso--ok {
+	background: color-mix(in srgb, var(--primary) 16%, var(--surface-container));
+	color: var(--on-surface);
+}
+
+.aviso--erro {
+	background: var(--error-container);
+	color: var(--on-error-container);
+}
+
+.amostra-cores {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	padding: var(--s-2) var(--s-4) var(--s-4);
+}
+
+/* Amostra de cor: 36 px em vez de 44. Nove cores cabiam em duas fileiras com
+   muito espaço morto entre elas; nesta medida as nove caem numa faixa só em
+   telas de 390 px, sem perder o alvo de toque (o espaçamento completa 44). */
+.amostra-cor {
+	position: relative;
+	width: 36px;
+	height: 36px;
+	border-radius: var(--r-pill);
+	border: 0;
+	transition: transform var(--dur-fast) var(--ease);
+}
+
+.amostra-cor[aria-pressed='true'] {
+	box-shadow:
+		0 0 0 2px var(--surface-container),
+		0 0 0 4px var(--on-surface);
+}
+
+.amostra-cor:active {
+	transform: scale(0.9);
+}
+
+.ponto-sync {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	border-radius: var(--r-pill);
+	background: var(--surface-container-high);
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	color: var(--on-surface-variant);
+}
+
+.ponto-sync--ok {
+	background: color-mix(in srgb, var(--primary) 22%, transparent);
+	color: var(--on-surface);
+}
+
+.ponto-sync--pendente {
+	background: var(--tertiary-container);
+	color: var(--on-tertiary-container);
+}
+
+.ponto-sync--offline {
+	background: var(--error-container);
+	color: var(--on-error-container);
+}
+
+/* ------------------------------------------------------------------ projeto */
+
+/* Resumo simples usado em Hábitos (número + duas linhas). Era o antigo resumo
+   do projeto; ficou só aqui, onde o número grande é o dado principal. */
+.resumo-lista {
+	display: flex;
+	align-items: center;
+	gap: var(--s-4);
+	margin: 0 var(--s-4) var(--s-4);
+	padding: var(--s-4);
+	border-radius: var(--r-2xl);
+	background: color-mix(in srgb, var(--cor-cat, var(--primary)) 18%, var(--surface-container));
+}
+
+.resumo-lista__numero {
+	font-size: 34px;
+	font-weight: var(--w-heavy);
+	letter-spacing: -0.04em;
+	line-height: 1;
+	color: var(--on-surface);
+	font-variant-numeric: tabular-nums;
+}
+
+.resumo-lista__texto {
+	display: flex;
+	flex-direction: column;
+	font-size: var(--text-sm);
+	color: var(--on-surface-variant);
+}
+
+/* Painel do projeto por dentro.
+   Substitui o antigo resumo do projeto: número de 34px e duas linhas de texto
+   ocupavam meia tela para dizer apenas "N tarefas abertas". Agora é uma faixa
+   compacta com barra de progresso, descrição e indicadores em uma linha. */
+.painel-projeto {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	/* Mesma largura e o mesmo raio dos grupos de linha de todas as telas: antes
+	   ele tinha `margin` lateral extra (16+16), o que o encolhia para 326 px e
+	   o destacava como uma caixa menor dentro do projeto. */
+	padding: var(--s-3) var(--s-4);
+	border-radius: var(--r-xl);
+	background: var(--surface-container);
+}
+
+.painel-projeto__topo {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+}
+
+.painel-projeto__marca {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 0;
+	background: none !important;
+	color: var(--cor-cat, var(--primary));
+	flex-shrink: 0;
+}
+
+.painel-projeto__barra {
+	flex: 1;
+	height: 7px;
+	min-width: 0;
+	border-radius: var(--r-pill);
+	background: var(--surface-container-highest);
+	overflow: hidden;
+}
+
+.painel-projeto__barra > span {
+	display: block;
+	height: 100%;
+	border-radius: var(--r-pill);
+	transition: width var(--dur-slow) var(--ease);
+}
+
+.painel-projeto__pct {
+	font-size: var(--text-sm);
+	font-weight: var(--w-heavy);
+	color: var(--on-surface);
+	flex-shrink: 0;
+}
+
+.painel-projeto__descricao {
+	margin: 0;
+	font-size: var(--text-sm);
+	line-height: 1.45;
+	color: var(--on-surface-variant);
+}
+
+.painel-projeto__indicadores {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-3);
+	flex-wrap: wrap;
+	padding-top: var(--s-2);
+	border-top: 1px solid color-mix(in srgb, var(--outline-variant) 45%, transparent);
+}
+
+.indicador {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 5px;
+	font-size: var(--text-xs);
+	color: var(--on-surface-variant);
+}
+
+.indicador--prazo {
+	align-items: center;
+	gap: 4px;
+	/* Antes era `margin-left: auto`, o que empurrava a data para uma segunda
+	   linha sozinha quando os indicadores ocupavam a largura toda. */
+	margin-left: 0;
+	padding: 2px 8px;
+	border-radius: var(--r-pill);
+	background: var(--surface-container-high);
+	color: var(--on-surface-variant);
+}
+
+.indicador__valor {
+	font-size: var(--text-sm);
+	font-weight: var(--w-heavy);
+	color: var(--on-surface);
+}
+
+.indicador--erro .indicador__valor,
+.indicador--erro {
+	color: var(--error);
+}
+
+.indicador--alerta .indicador__valor,
+.indicador--alerta {
+	color: var(--prioridade-2);
+}
+
+/* ------------------------------------------------------------------ marcos */
+
+.marco {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	min-height: 44px;
+	padding: var(--s-1) var(--s-2) var(--s-1) var(--s-3);
+	background: transparent;
+}
+
+/* Lista de marcos é um grupo, não uma pilha de cartões: cada item era um bloco
+   com fundo próprio, e três marcos pareciam três telas. Agora só o grupo tem
+   fundo, e a separação é uma linha fina entre os itens. */
+.marco + .marco {
+	box-shadow: inset 0 1px 0 color-mix(in srgb, var(--outline-variant) 60%, transparent);
+}
+
+.marco--feito {
+	background: transparent;
+}
+
+.marco__texto {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.marco__titulo {
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface);
+	overflow-wrap: anywhere;
+}
+
+.marco--feito .marco__titulo {
+	text-decoration: line-through;
+	color: var(--on-surface-variant);
+}
+
+.marco__data {
+	font-size: var(--text-xs);
+	font-weight: var(--w-medium);
+	color: var(--on-surface-variant);
+}
+
+/* Marcos usam o mesmo checkbox da tarefa, mas menor: são uma linha de apoio,
+   não o item principal da tela. */
+.box-checkbox {
+	flex-shrink: 0;
+	width: 34px;
+	height: 34px;
+	margin-left: -4px;
+}
+
+.box-checkbox .checkbox__marca {
+	width: 19px;
+	height: 19px;
+}
+
+/* O título com ícone e contador precisa alinhar a linha de base entre si:
+   antes o número "1/3" ficava abaixo do texto por causa do ícone maior. */
+#secao-marcos {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--s-2);
+	flex-wrap: wrap;
+}
+
+#secao-marcos .secao-titulo__contagem {
+	margin-left: 0;
+}
+
+.marco-vazio {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+	width: 100%;
+	min-height: 48px;
+	padding: var(--s-2) var(--s-3);
+	border-radius: var(--r-lg);
+	border: 1px dashed var(--outline-variant);
+	background: transparent;
+	color: var(--on-surface-variant);
+	font-size: var(--text-sm);
+	text-align: left;
+}
+
+.marco-vazio:active {
+	background: var(--surface-container);
+}
+
+/* ------------------------------------------------------------------ opções */
+
+.opcoes-criacao {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-4) var(--s-5);
+}
+
+.opcao-criacao {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	width: 100%;
+	min-height: 56px;
+	padding: var(--s-2) var(--s-3);
+	border-radius: var(--r-lg);
+	background: var(--surface-container);
+	text-align: left;
+	transition: background var(--dur) var(--ease);
+}
+
+.opcao-criacao:active {
+	background: var(--surface-container-high);
+}
+
+/* Ícone da opção sem a bolha de 46 px: num menu de seis itens, seis círculos
+   empilhados davam peso visual a algo que é só um atalho. */
+.opcao-criacao__icone {
+	display: grid;
+	place-items: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 0;
+	background: none;
+	color: var(--primary);
+	flex-shrink: 0;
+}
+
+.opcao-criacao__texto {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.opcao-criacao__titulo {
+	font-size: var(--text-body);
+	font-weight: var(--w-bold);
+	color: var(--on-surface);
+}
+
+.opcao-criacao__descricao {
+	font-size: var(--text-sm);
+	color: var(--on-surface-variant);
+}
+
+/* --------------------------------------------------------- chips automáticos */
+
+.auto-chips {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+}
+
+.chip--auto {
+	min-height: 30px;
+	padding: 0 10px;
+	background: var(--tertiary-container);
+	color: var(--on-tertiary-container);
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+}
+
+.auto-chips__limpar {
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	color: var(--primary);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+/* -------------------------------------------------------------- editor blocos */
+
+.editor-blocos {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	padding: var(--s-2) var(--s-4) var(--s-5);
+}
+
+.editor-blocos__item {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	min-height: 64px;
+	padding: var(--s-2) var(--s-2) var(--s-2) var(--s-3);
+	border-radius: var(--r-xl);
+	background: var(--surface-container);
+}
+
+.editor-blocos__texto {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.editor-blocos__acoes {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.bloco-texto {
+	display: block;
+	width: 100%;
+	padding: var(--s-4);
+	border-radius: var(--r-2xl);
+	background: var(--surface-container);
+	text-align: left;
+}
+
+.bloco-texto__conteudo {
+	white-space: pre-wrap;
+	font-size: var(--text-body);
+	line-height: 1.55;
+	color: var(--on-surface);
+}
+
+.bloco-texto__edicao {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
+	padding: var(--s-3);
+}
+
+/* Bloco "progresso compacto" do Início. */
+.resumo-hoje {
+	display: flex;
+	align-items: center;
+	gap: var(--s-4);
+	padding: var(--s-4);
+	border-radius: var(--r-2xl);
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+}
+
+.resumo-hoje__numero {
+	font-size: 40px;
+	font-weight: var(--w-heavy);
+	line-height: 1;
+	letter-spacing: -0.05em;
+	font-variant-numeric: tabular-nums;
+}
+
+.resumo-hoje__texto {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+}
+
+@media (min-width: 900px) {
+	.calendario__grade {
+		gap: 4px;
+	}
+
+	.dia {
+		min-height: 64px;
+		font-size: var(--text-body);
+	}
+}
+
+/* ------------------------------------------------------- central de projetos */
+
+.projeto-lista {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	/* Sem padding próprio: a lista vive dentro de `.secao`, que já aplica os
+	   16 px laterais. Somar outro aqui deixava o cartão em 32 px de cada lado,
+	   enquanto todas as outras telas usam 16 — era o "container pequeno e
+	   centralizado" do painel de projetos. */
+}
+
+.projeto-cartao {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	padding: var(--s-3) var(--s-4);
+	border-radius: var(--r-xl);
+	background: var(--surface-container);
+	transition: background var(--dur) var(--ease);
+}
+
+/* O corpo é o alvo do toque que abre o projeto; o lápis do topo fica fora do
+   link. Sem `display: block`, o link encolheria para o tamanho do conteúdo. */
+.projeto-cartao__corpo {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	border-radius: var(--r-md);
+}
+
+.projeto-cartao__corpo:active,
+.projeto-cartao__titulo-area:active {
+	opacity: 0.72;
+}
+
+/* Selo de estado: pausado e concluído precisam se distinguir do ativo na
+   central. A cor acompanha o tema e a PALAVRA está sempre escrita. */
+.selo {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	flex-shrink: 0;
+	padding: 2px 8px;
+	border-radius: var(--r-pill);
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	letter-spacing: 0.01em;
+	white-space: nowrap;
+}
+
+.selo::before {
+	content: '';
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: currentColor;
+}
+
+.selo--ativo {
+	background: color-mix(in srgb, var(--primary) 14%, var(--surface-container));
+	color: var(--primary);
+}
+
+.selo--pausado {
+	background: color-mix(in srgb, var(--prioridade-2) 18%, var(--surface-container));
+	color: var(--prioridade-2);
+}
+
+.selo--concluido {
+	background: color-mix(in srgb, var(--on-surface-variant) 14%, var(--surface-container));
+	color: var(--on-surface-variant);
+}
+
+.chip__contagem {
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	opacity: 0.7;
+}
+
+.projeto-cartao__topo {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-3);
+}
+
+.projeto-cartao__marca {
+	flex: 0 0 auto;
+	width: 10px;
+	height: 10px;
+	margin-top: 7px;
+	border-radius: 50%;
+}
+
+.projeto-cartao__titulo-area {
+	flex: 1;
+	min-width: 0;
+}
+
+.projeto-cartao__titulo {
+	margin: 0;
+	font-size: var(--text-md);
+	font-weight: var(--w-bold);
+	letter-spacing: -0.01em;
+	color: var(--on-surface);
+}
+
+.projeto-cartao__etapa {
+	margin: 2px 0 0;
+	font-size: var(--text-xs);
+	font-weight: var(--w-medium);
+	color: var(--on-surface-variant);
+}
+
+.projeto-cartao__prazo {
+	flex: 0 0 auto;
+	padding: 3px 9px;
+	border-radius: var(--r-pill);
+	background: var(--surface-container-highest);
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	color: var(--on-surface-variant);
+	white-space: nowrap;
+}
+
+.projeto-cartao__prazo[data-vencido='sim'] {
+	background: var(--error-container);
+	color: var(--on-error-container);
+}
+
+.projeto-cartao__descricao {
+	margin: 0;
+	font-size: var(--text-sm);
+	line-height: 1.45;
+	color: var(--on-surface-variant);
+}
+
+.projeto-cartao__barra {
+	height: 6px;
+	border-radius: var(--r-pill);
+	background: var(--surface-container-highest);
+	overflow: hidden;
+}
+
+.projeto-cartao__barra > span {
+	display: block;
+	height: 100%;
+	border-radius: var(--r-pill);
+	transition: width var(--dur-slow) var(--ease);
+}
+
+.projeto-cartao__rodape {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+	font-variant-numeric: tabular-nums;
+	/* min-width: 0 nos filhos é o que impede "0/3 · 0%" de quebrar em duas
+	   linhas quando o título da próxima tarefa é longo. */
+	min-width: 0;
+	flex-wrap: nowrap;
+}
+
+.projeto-cartao__contagem {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+.projeto-cartao__atraso {
+	color: var(--error);
+}
+
+.projeto-cartao__proxima {
+	margin-left: auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--on-surface);
+	font-weight: var(--w-medium);
+	opacity: 0.75;
+}
+
+.projeto-cartao__marcos {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	flex-shrink: 0;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.projeto-cartao__marcos svg {
+	width: 13px;
+	height: 13px;
+	flex-shrink: 0;
+}
+
+/* Próxima entrega: uma faixa fina dentro do cartão, com o marco e a data. */
+.projeto-cartao__proximo-marco {
+	display: flex;
+	align-items: baseline;
+	gap: var(--s-2);
+	min-width: 0;
+	padding-top: var(--s-2);
+	border-top: 1px dashed color-mix(in srgb, var(--outline-variant) 60%, transparent);
+	font-size: var(--text-xs);
+}
+
+.projeto-cartao__proximo-rotulo {
+	flex-shrink: 0;
+	font-weight: var(--w-bold);
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--on-surface-variant);
+	opacity: 0.8;
+}
+
+.projeto-cartao__proximo-titulo {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: var(--w-semibold);
+	color: var(--on-surface);
+}
+
+.projeto-cartao__proximo-data {
+	margin-left: auto;
+	flex-shrink: 0;
+	font-weight: var(--w-bold);
+	color: var(--on-surface-variant);
+}
+
+/* Linha de ajuste que empilha: usada pelo seletor de provedor, onde o
+   segmentado precisa de largura inteira embaixo do texto. */
+.linha-ajuste--coluna {
+	flex-direction: column;
+	align-items: stretch;
+	gap: var(--s-3);
+}
+
+/* --------------------------------------------------------------------------
+   Tons do Jarvis
+
+   Oito opções não cabem numa fileira: cada uma precisa de rótulo E exemplo,
+   porque "Sarcástico" sozinho não diz nada. Grade de duas colunas, e em tela
+   estreita uma.
+   -------------------------------------------------------------------------- */
+
+.tons {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--s-2);
+}
+
+.tons__item {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	min-height: 56px;
+	padding: var(--s-3);
+	border-radius: var(--r-md);
+	border: 1px solid var(--outline-variant);
+	background: var(--surface-container);
+	text-align: left;
+	transition:
+		background var(--dur) var(--ease),
+		border-color var(--dur) var(--ease);
+}
+
+.tons__item[aria-pressed='true'] {
+	border-color: var(--primary);
+	background: var(--primary-container);
+}
+
+.tons__rotulo {
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	color: var(--on-surface);
+}
+
+.tons__exemplo {
+	font-size: var(--text-xs);
+	line-height: 1.35;
+	color: var(--on-surface-variant);
+}
+
+@media (max-width: 380px) {
+	.tons {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* --------------------------------------------------------------------------
+   Anotações de projeto (v5)
+
+   Cada anotação é um cartão com data no topo. O texto aceita parágrafos
+   separados por linha em branco, porque quem anota decisão de reunião escreve
+   em blocos.
+   -------------------------------------------------------------------------- */
+
+.anotacao-lista {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.anotacao {
+	padding: var(--s-4);
+	border-radius: var(--r-md);
+	background: var(--surface-container);
+	border: 1px solid var(--outline-variant);
+}
+
+.anotacao__topo {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	margin-bottom: var(--s-2);
+}
+
+.anotacao__quando {
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+	text-transform: lowercase;
+}
+
+.anotacao__acoes {
+	display: flex;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+.anotacao__titulo {
+	margin: 0 0 var(--s-2);
+	font-size: var(--text-md);
+	font-weight: var(--w-bold);
+	color: var(--on-surface);
+	line-height: 1.3;
+}
+
+.anotacao__corpo {
+	color: var(--on-surface);
+	line-height: 1.55;
+}
+
+.anotacao__paragrafo {
+	margin: 0 0 var(--s-2);
+	font-size: var(--text-sm);
+}
+
+.anotacao__paragrafo:last-child {
+	margin-bottom: 0;
+}
+
+/* Data e hora lado a lado, mas uma em cima da outra em tela estreita. */
+.anotacao-quando {
+	display: grid;
+	grid-template-columns: 1.4fr 1fr;
+	gap: var(--s-3);
+}
+
+.campo-opcional {
+	font-weight: var(--w-regular);
+	color: var(--on-surface-variant);
+}
+
+.botao-icone--pequeno {
+	width: 36px;
+	height: 36px;
+	min-width: 36px;
+	min-height: 36px;
+}
+
+/* Ordenação da central de projetos. */
+.projeto-ordem {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	margin-top: var(--s-3);
+}
+
+.projeto-ordem__rotulo {
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}

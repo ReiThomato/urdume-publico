@@ -1,0 +1,539 @@
+/* ---------------------------------------------------------------------------
+   Nexo — tokens do sistema visual.
+
+   A paleta NÃO é escrita à mão: `src/app/tema.ts` gera as variáveis
+   `--primary`, `--surface-container*`, `--outline` etc. a partir de uma
+   cor-semente, com o mesmo motor Material 3 Expressive que o Grit usa. Aqui
+   ficam só os valores de segurança (primeiro desenho, antes do banco abrir) e
+   as escalas que não vêm da paleta: forma, tipografia, espaço, movimento.
+   --------------------------------------------------------------------------- */
+
+/* Troca de tema: uma moldura inteira sem transições evita o "chuvisco" de
+   cores animando em dezenas de elementos ao mesmo tempo. `tema-trocando` é
+   colocada em <html> por `aplicarTema` e removida após dois frames. */
+html.tema-trocando,
+html.tema-trocando * {
+	transition: none !important;
+}
+
+/* Figtree: a fonte do Grit. Variável (peso 300–900), por isso um arquivo só
+   cobre títulos e texto. */
+@font-face {
+	font-family: 'Figtree';
+	src: url('/fonts/Figtree-latin.woff2') format('woff2');
+	font-weight: 300 900;
+	font-style: normal;
+	font-display: swap;
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+		U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+		U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: 'Figtree';
+	src: url('/fonts/Figtree-latin-ext.woff2') format('woff2');
+	font-weight: 300 900;
+	font-style: normal;
+	font-display: swap;
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+		U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+		U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Archivo: fonte alternativa de Ajustes. Larga e firme, para quem quer títulos
+   mais "editoriais". */
+@font-face {
+	font-family: 'Archivo';
+	src: url('/fonts/Archivo-latin.woff2') format('woff2');
+	font-weight: 100 900;
+	font-stretch: 62% 125%;
+	font-style: normal;
+	font-display: swap;
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+		U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+		U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+	font-family: 'Archivo';
+	src: url('/fonts/Archivo-latin-ext.woff2') format('woff2');
+	font-weight: 100 900;
+	font-stretch: 62% 125%;
+	font-style: normal;
+	font-display: swap;
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+		U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+		U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Inter e Manrope continuam disponíveis como escolha em Ajustes. */
+@font-face {
+	font-family: 'Inter';
+	src: url('/fonts/InterVariable.woff2') format('woff2');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Manrope';
+	src: url('/fonts/Manrope-latin.woff2') format('woff2');
+	font-weight: 400 800;
+	font-style: normal;
+	font-display: swap;
+}
+
+@font-face {
+	font-family: 'Manrope';
+	src: url('/fonts/Manrope-latin-ext.woff2') format('woff2');
+	font-weight: 400 800;
+	font-style: normal;
+	font-display: swap;
+	unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+		U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020,
+		U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+	/* --- superfícies (valores claros de segurança; o tema sobrescreve) --- */
+	--background: #fdf7f4;
+	--on-background: #1f1a18;
+	--surface: #fdf7f4;
+	--on-surface: #1f1a18;
+	--surface-variant: #f2dfd8;
+	--on-surface-variant: #53433f;
+	--surface-dim: #e1d7d3;
+	--surface-bright: #fdf7f4;
+	--surface-container-lowest: #ffffff;
+	--surface-container-low: #fbf1ee;
+	--surface-container: #f5ece8;
+	--surface-container-high: #efe6e2;
+	--surface-container-highest: #e9e0dc;
+	--outline: #85736e;
+	--outline-variant: #d7c2bc;
+
+	--primary: #8f4c35;
+	--on-primary: #ffffff;
+	--primary-container: #ffdbd0;
+	--on-primary-container: #3a0b00;
+	--primary-fixed: #ffdbd0;
+	--primary-fixed-dim: #ffb59f;
+	--on-primary-fixed: #3a0b00;
+	--inverse-primary: #ffb59f;
+
+	--secondary: #77574d;
+	--on-secondary: #ffffff;
+	--secondary-container: #ffdbd0;
+	--on-secondary-container: #2c160e;
+
+	--tertiary: #6c5d2f;
+	--on-tertiary: #ffffff;
+	--tertiary-container: #f5e1a7;
+	--on-tertiary-container: #231b00;
+
+	--error: #ba1a1a;
+	--on-error: #ffffff;
+	--error-container: #ffdad6;
+	--on-error-container: #410002;
+
+	--inverse-surface: #342f2d;
+	--inverse-on-surface: #f8efeb;
+	--scrim: #000000;
+	--shadow: #000000;
+
+	/* --- prioridade -----------------------------------------------------------
+	   1 baixa, 2 média, 3 alta. São cores de ESTADO, separadas do acento do
+	   tema: a cor do app muda de acordo com a semente escolhida, e a prioridade
+	   precisa continuar vermelha/laranja/verde em qualquer tema. Os valores são
+	   fixos e passam contraste AA sobre as superfícies do modo claro e escuro. */
+	--prioridade-1: #2f6b4a;
+	--prioridade-1-container: #d5f2df;
+	--prioridade-2: #8a5200;
+	--prioridade-2-container: #ffe3bd;
+	--prioridade-3: #b3261e;
+	--prioridade-3-container: #ffdad6;
+
+	/* --- forma: Material 3 Expressive, mais arredondado que o padrão.
+	   Ajustado para baixo na revisão de densidade: raio de 28 num cartão de
+	   390 px de largura comia a borda e fazia o bloco parecer maior do que é. --- */
+	--r-xs: 4px;
+	--r-sm: 6px;
+	--r-md: 10px;
+	--r-lg: 14px;
+	--r-xl: 18px;
+	--r-2xl: 22px;
+	--r-3xl: 28px;
+	--r-pill: 999px;
+
+	/* --- tipografia --- */
+	--font: 'Figtree', system-ui, -apple-system, Roboto, sans-serif;
+	--font-num: 'Figtree', ui-monospace, 'SF Mono', Menlo, monospace;
+
+	--text-display: 30px;
+	--text-headline: 24px;
+	--text-title: 19px;
+	--text-lg: 17px;
+	--text-body: 15.5px;
+	--text-sm: 13.5px;
+	--text-xs: 11.5px;
+
+	--w-light: 300;
+	--w-regular: 400;
+	--w-medium: 500;
+	--w-semibold: 600;
+	--w-bold: 700;
+	--w-heavy: 800;
+
+	/* --- espaço (grade de 4) --- */
+	--s-1: 4px;
+	--s-2: 8px;
+	--s-3: 12px;
+	--s-4: 16px;
+	--s-5: 20px;
+	--s-6: 24px;
+	--s-8: 32px;
+	--s-10: 40px;
+	--s-12: 48px;
+
+	/* --- elevação: sombras curtas e tingidas, não cinza puro --- */
+	--elev-1: 0 1px 2px rgb(0 0 0 / 0.14), 0 1px 3px 1px rgb(0 0 0 / 0.07);
+	--elev-2: 0 1px 2px rgb(0 0 0 / 0.14), 0 2px 6px 2px rgb(0 0 0 / 0.07);
+	--elev-3: 0 4px 8px 3px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.16);
+
+	/* --- movimento: curvas do Material Expressive --- */
+	--ease: cubic-bezier(0.2, 0, 0, 1);
+	--ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+	--ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+	--dur-fast: 120ms;
+	--dur: 200ms;
+	--dur-slow: 320ms;
+
+	/* --- layout ---
+	   Barra e topo mais baixos: eram 80 + 64 px de moldura fixa num celular de
+	   780 px, quase um quinto da tela só de casca. */
+	--nav-h: 64px;
+	--rail-w: 88px;
+	--content-max: 720px;
+	--app-bar-h: 56px;
+
+	/* Cor de destaque secundária usada nos gráficos: sai do terciário. */
+	--grafico-1: var(--primary);
+	--grafico-2: var(--tertiary);
+	--grafico-3: var(--secondary);
+}
+
+/* O tema escuro vem inteiro do JS (mesma semente, esquema escuro). Este bloco
+   só cobre o primeiro quadro, antes do IndexedDB responder. */
+@media (prefers-color-scheme: dark) {
+	:root:not([data-tema]) {
+		--background: #191210;
+		--on-background: #f0e0dc;
+		--surface: #191210;
+		--on-surface: #f0e0dc;
+		--surface-variant: #53433f;
+		--on-surface-variant: #d7c2bc;
+		--surface-container-lowest: #140c0a;
+		--surface-container-low: #211917;
+		--surface-container: #251d1b;
+		--surface-container-high: #302825;
+		--surface-container-highest: #3b322f;
+		--outline: #a08c87;
+		--outline-variant: #53433f;
+		--primary: #ffb59f;
+		--on-primary: #561f0c;
+		--primary-container: #723523;
+		--on-primary-container: #ffdbd0;
+		--secondary-container: #5d4037;
+		--on-secondary-container: #ffdbd0;
+		--tertiary-container: #54461a;
+		--on-tertiary-container: #f5e1a7;
+		--inverse-surface: #f0e0dc;
+		--inverse-on-surface: #342f2d;
+
+		/* Prioridade no escuro: tons claros e containers escuros, mesma família. */
+		--prioridade-1: #8fd6ae;
+		--prioridade-1-container: #12341f;
+		--prioridade-2: #f0bc74;
+		--prioridade-2-container: #3a2600;
+		--prioridade-3: #ffb4ab;
+		--prioridade-3-container: #3f0f0b;
+	}
+}
+
+/* --------------------------------------------------------------------- reset */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	height: 100%;
+	-webkit-tap-highlight-color: transparent;
+	background: var(--background);
+	/* O WebView do Android às vezes herda 14px; o app é desenhado para 16. */
+	font-size: 16px;
+}
+
+body {
+	margin: 0;
+	min-height: 100dvh;
+	background: var(--background);
+	color: var(--on-surface);
+	font-family: var(--font);
+	font-size: var(--text-body);
+	font-weight: var(--w-regular);
+	line-height: 1.5;
+	letter-spacing: 0;
+	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+	overscroll-behavior-y: none;
+	touch-action: manipulation;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+ul,
+ol,
+figure {
+	margin: 0;
+}
+
+ul,
+ol {
+	padding: 0;
+	list-style: none;
+}
+
+button {
+	font: inherit;
+	color: inherit;
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+	touch-action: manipulation;
+	user-select: none;
+	-webkit-user-select: none;
+}
+
+input,
+textarea,
+select {
+	font: inherit;
+	color: inherit;
+	font-size: 16px; /* abaixo de 16 o WebView dá zoom ao focar */
+}
+
+a {
+	color: inherit;
+	text-decoration: none;
+}
+
+svg {
+	display: block;
+	flex-shrink: 0;
+}
+
+::selection {
+	background: var(--primary);
+	color: var(--on-primary);
+}
+
+:focus-visible {
+	outline: 2px solid var(--primary);
+	outline-offset: 2px;
+	border-radius: var(--r-sm);
+}
+
+/* Números alinhados em colunas (datas, contadores, gráficos). */
+.tabular {
+	font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------------- utilitários */
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+.pular-para-conteudo {
+	position: absolute;
+	left: 12px;
+	top: -80px;
+	z-index: 200;
+	padding: 12px 20px;
+	border-radius: var(--r-pill);
+	background: var(--primary);
+	color: var(--on-primary);
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+	box-shadow: var(--elev-2);
+	transition: top var(--dur) var(--ease);
+}
+
+.pular-para-conteudo:focus-visible {
+	top: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 1ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+		scroll-behavior: auto !important;
+	}
+}
+
+/* ---------------------------------------------------------------------------
+   Preferências de acessibilidade
+   Três níveis de texto, alto contraste e movimento reduzido, sem depender do
+   sistema (o WebView do Android nem sempre repassa essas opções).
+   --------------------------------------------------------------------------- */
+
+:root[data-texto='grande'] {
+	--text-body: 17.5px;
+	--text-sm: 15.5px;
+	--text-xs: 13px;
+	--text-lg: 19.5px;
+	--text-title: 23px;
+	--text-headline: 28px;
+	--text-display: 36px;
+}
+
+:root[data-texto='maior'] {
+	--text-body: 19px;
+	--text-sm: 17px;
+	--text-xs: 14px;
+	--text-lg: 21px;
+	--text-title: 25px;
+	--text-headline: 30px;
+	--text-display: 40px;
+}
+
+/* Alto contraste: texto puro e contorno visível. Não usa preto sobre branco
+   porque isso apagaria a hierarquia de camadas; usa contraste AAA. */
+:root[data-contraste='alto'] {
+	--on-surface: #000000;
+	--on-surface-variant: #1a1a1a;
+	--outline: #000000;
+	--outline-variant: #4d4d4d;
+	--surface: #ffffff;
+	--background: #ffffff;
+	--surface-container-lowest: #ffffff;
+	--surface-container-low: #ffffff;
+	--surface-container: #f4f4f4;
+	--surface-container-high: #ececec;
+	--surface-container-highest: #e2e2e2;
+}
+
+:root[data-contraste='alto'][data-tema='dark'] {
+	--on-surface: #ffffff;
+	--on-surface-variant: #f0f0f0;
+	--outline: #ffffff;
+	--outline-variant: #b0b0b0;
+	--surface: #000000;
+	--background: #000000;
+	--surface-container-lowest: #000000;
+	--surface-container-low: #0d0d0d;
+	--surface-container: #1a1a1a;
+	--surface-container-high: #262626;
+	--surface-container-highest: #333333;
+}
+
+/* Prioridade no escuro.
+   As cores de prioridade são FIXAS (não saem da cor-semente, para significarem
+   sempre a mesma coisa). Por isso precisam de um segundo conjunto para o tema
+   escuro: sem ele, o verde-escuro de "baixa" era desenhado sobre um fundo quase
+   preto e sumia. O atributo é escrito por `aplicarTema` em <html>. */
+:root[data-tema='dark'] {
+	--prioridade-1: #8fd6ae;
+	--prioridade-1-container: #12341f;
+	--prioridade-2: #f0bc74;
+	--prioridade-2-container: #3a2600;
+	--prioridade-3: #ffb4ab;
+	--prioridade-3-container: #3f0f0b;
+}
+
+:root[data-contraste='alto'] .cartao,
+:root[data-contraste='alto'] .linha-grupo,
+:root[data-contraste='alto'] .calendario__grade {
+	border: 1px solid var(--outline);
+}
+
+/* Movimento reduzido escolhido no app. */
+:root[data-movimento='reduzido'] *,
+:root[data-movimento='reduzido'] *::before,
+:root[data-movimento='reduzido'] *::after {
+	animation: none !important;
+	transition: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Interruptor (switch) — Material 3 Expressive
+   --------------------------------------------------------------------------- */
+
+.interruptor {
+	position: relative;
+	width: 52px;
+	height: 32px;
+	border-radius: var(--r-pill);
+	background: var(--surface-container-highest);
+	border: 2px solid var(--outline);
+	flex-shrink: 0;
+	transition:
+		background var(--dur) var(--ease),
+		border-color var(--dur) var(--ease);
+}
+
+/* O alvo de toque é maior que o desenho: 48 px de área, sem engordar a pílula.
+   Sem isso o switch fica com 32 px de altura e é difícil de acertar. */
+.interruptor::after {
+	content: '';
+	position: absolute;
+	inset: -9px -4px;
+	border-radius: var(--r-pill);
+}
+
+.interruptor[aria-checked='true'] {
+	background: var(--primary);
+	border-color: var(--primary);
+}
+
+.interruptor__bolinha {
+	position: absolute;
+	top: 50%;
+	left: 4px;
+	width: 16px;
+	height: 16px;
+	border-radius: 50%;
+	background: var(--outline);
+	transform: translateY(-50%);
+	transition:
+		transform var(--dur-slow) var(--ease-spring),
+		width var(--dur) var(--ease),
+		height var(--dur) var(--ease),
+		background var(--dur) var(--ease),
+		left var(--dur) var(--ease);
+}
+
+.interruptor[aria-checked='true'] .interruptor__bolinha {
+	left: calc(100% - 28px);
+	width: 24px;
+	height: 24px;
+	background: var(--on-primary);
+}

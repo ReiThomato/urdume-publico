@@ -1,0 +1,1892 @@
+/* ---------------------------------------------------------------------------
+   Nexo — componentes base, na linguagem do Grit (Material 3 Expressive).
+
+   Regras que valem para tudo:
+   - superfície = `--surface-container*`, nunca branco chapado sobre branco;
+   - raio grande nos blocos (20–28) e pequeno entre irmãos empilhados (4–8),
+     que é o que faz uma lista parecer um grupo e não uma pilha de caixas;
+   - título grande, pesado e com tracking negativo; corpo em 16; meta em 14;
+   - cor só carrega significado: lista, hábito, estado, urgência;
+   - nada de borda fininha cinza: separação é por camada e por espaço.
+   --------------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------------- tela */
+
+/* Trava a página: nenhuma tela rola para os lados.
+   O sintoma era "toda a aba de Tarefas arrasta para o lado e a barra de baixo
+   acompanha". A causa era uma faixa de chips de 760px num viewport de 375px;
+   mesmo corrigindo a faixa, qualquer conteúdo futuro mais largo (título longo,
+   tabela, código) voltaria a empurrar o documento. `overflow-x: clip` corta o
+   eixo horizontal sem criar um contexto de rolagem — diferente de `hidden`,
+   que no body pode transformar a página num contêiner e quebrar o `sticky`
+   do topo. O eixo vertical continua rolando normalmente. */
+html,
+body {
+	overflow-x: clip;
+	max-width: 100%;
+}
+
+.tela {
+	display: flex;
+	flex-direction: column;
+	padding-top: env(safe-area-inset-top);
+	min-height: 100dvh;
+	/* min-width: 0 impede que um filho de conteúdo largo (chips, texto sem
+	   quebra) aumente a largura da tela dentro de um contêiner flex. */
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.conteudo {
+	flex: 1;
+	width: 100%;
+	min-width: 0;
+	max-width: var(--content-max);
+	margin: 0 auto;
+	/*
+	 * Espaço para a barra + a pilha de botões flutuantes + respiro do gesto.
+	 *
+	 * A conta, e não um chute: o botão "Conversar" tem 44 px, o "Criar" tem 56,
+	 * o vão entre eles é 12 e o afastamento da barra é 16. Total: 128 px acima
+	 * da barra. Com os 80 antigos, o último cartão de uma lista ficava com os
+	 * botões de ação debaixo do FAB — acontecia nas anotações do projeto.
+	 */
+	padding-bottom: calc(var(--nav-h) + 132px + env(safe-area-inset-bottom));
+}
+
+.conteudo--sem-fab {
+	padding-bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom));
+}
+
+/* ------------------------------------------------------------------ app bar */
+
+.topo {
+	position: sticky;
+	top: 0;
+	z-index: 20;
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-2);
+	width: 100%;
+	max-width: var(--content-max);
+	margin: 0 auto;
+	padding: var(--s-3) var(--s-4) var(--s-2);
+	/*
+	 * Fundo quase sólido, e não 88%.
+	 *
+	 * O `backdrop-filter` (o desfoque do que passa por baixo) não funciona em
+	 * todas as versões do WebView do Android — e onde ele falha, sobram os 12%
+	 * de transparência: o texto do conteúdo aparece por baixo do título
+	 * enquanto se rola. Sólido com uma pitada de cor resolve nos dois casos:
+	 * com desfoque fica bonito, sem desfoque fica legível.
+	 */
+	background: color-mix(in srgb, var(--background) 97%, var(--surface-container));
+	backdrop-filter: blur(18px) saturate(1.3);
+	-webkit-backdrop-filter: blur(18px) saturate(1.3);
+}
+
+/* Início: marca e ações na mesma linha, data embaixo da marca em corpo pequeno.
+   Antes esta tela empilhava marca + título "Hoje" de 30 px + data, e o topo
+   ocupava ~133 px; agora ocupa uma linha de 48 px e a data. */
+.topo--inicio {
+	align-items: center;
+	padding: var(--s-2) var(--s-4);
+}
+
+.topo__linha--marca {
+	align-items: center;
+	justify-content: space-between;
+}
+
+.topo__marca-bloco {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	min-width: 0;
+}
+
+.topo__data {
+	font-size: var(--text-xs);
+	font-weight: var(--w-medium);
+	color: var(--on-surface-variant);
+	letter-spacing: 0;
+}
+
+/* Só o Início empilha marca + título; as demais telas seguem em uma linha. */
+.topo--com-marca {
+	flex-direction: column;
+	gap: 0;
+}
+
+.topo__linha {
+	display: flex;
+	align-items: flex-start;
+	gap: var(--s-2);
+	width: 100%;
+}
+
+.topo__marca {
+	margin-bottom: var(--s-2);
+	color: var(--on-surface);
+}
+
+.marca {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--on-surface);
+}
+
+.marca__simbolo {
+	display: inline-flex;
+	transform: translateY(1px);
+}
+
+/* A palavra acompanha a fonte escolhida em Ajustes; o desenho do wordmark do
+   kit é a referência de peso e tracking. */
+.marca__palavra {
+	font-family: var(--font);
+	font-size: 21px;
+	font-weight: 600;
+	letter-spacing: -0.028em;
+	line-height: 1;
+}
+
+.topo--rolado {
+	background: color-mix(in srgb, var(--surface-container) 92%, transparent);
+}
+
+.topo__texto {
+	flex: 1;
+	min-width: 0;
+	padding-top: 2px;
+}
+
+.topo__titulo {
+	font-size: var(--text-display);
+	font-weight: var(--w-heavy);
+	line-height: 1.02;
+	letter-spacing: -0.038em;
+	color: var(--on-surface);
+}
+
+.topo__sobre {
+	margin-top: 2px;
+	font-size: var(--text-sm);
+	font-weight: var(--w-medium);
+	color: var(--on-surface-variant);
+}
+
+.topo__acoes {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------- seções */
+
+.secao {
+	padding: 0 var(--s-4);
+}
+
+.secao + .secao {
+	margin-top: var(--s-6);
+}
+
+.secao-cabecalho {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-3);
+	min-height: 32px;
+	padding: 0 2px;
+	margin-bottom: var(--s-2);
+}
+
+.secao-titulo {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	font-size: var(--text-title);
+	font-weight: var(--w-bold);
+	letter-spacing: -0.025em;
+	color: var(--on-surface);
+}
+
+/* O ícone do título NÃO fica dentro de uma bolha colorida.
+   Era um círculo de 32 px com fundo secundário: ao lado de um título de duas
+   palavras virava um enfeite solto, e como a cor vinha do container, cada seção
+   ganhava um tom diferente só para decorar. Agora é só o traço do ícone na cor
+   do texto secundário — a hierarquia vem do peso da fonte, não de um adesivo. */
+.secao-titulo__icone {
+	display: grid;
+	place-items: center;
+	width: 20px;
+	height: 20px;
+	border-radius: 0;
+	background: none;
+	color: var(--on-surface-variant);
+	flex-shrink: 0;
+}
+
+/* Único caso em que o ícone ganha cor: a seção de atraso, onde o vermelho é
+   informação (há o que recuperar), não decoração. */
+.secao-titulo__icone--alerta {
+	color: var(--error);
+}
+
+.secao-titulo__contagem {
+	font-size: var(--text-sm);
+	font-weight: var(--w-medium);
+	color: var(--on-surface-variant);
+}
+
+.secao-acao {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-height: 40px;
+	padding: 0 var(--s-3);
+	border-radius: var(--r-pill);
+	color: var(--primary);
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	transition: background var(--dur) var(--ease);
+}
+
+.secao-acao:active {
+	background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* ---------------------------------------------------------------- cartões */
+
+.cartao {
+	border-radius: var(--r-2xl);
+	background: var(--surface-container);
+	overflow: hidden;
+}
+
+.cartao--destaque {
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+}
+
+.cartao--vazio {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--s-3);
+	padding: var(--s-8) var(--s-5);
+	text-align: center;
+}
+
+.cartao--vazio p {
+	max-width: 34ch;
+	color: var(--on-surface-variant);
+	font-size: var(--text-sm);
+	line-height: 1.5;
+}
+
+.vazio__icone {
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border-radius: var(--r-lg);
+	background: var(--surface-container-high);
+	color: var(--on-surface-variant);
+}
+
+/* ------------------------------------------------------------------ linhas */
+
+.linha-grupo {
+	border-radius: var(--r-2xl);
+	background: var(--surface-container);
+	overflow: hidden;
+}
+
+.linha-grupo--solto {
+	overflow: visible;
+}
+
+.linha {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	width: 100%;
+	min-height: 60px;
+	padding: var(--s-3) var(--s-4);
+	text-align: left;
+}
+
+.linha + .linha::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: var(--s-4);
+	right: 0;
+	height: 1px;
+	background: var(--outline-variant);
+	opacity: 0.6;
+}
+
+.linha--sem-divisor::before {
+	display: none !important;
+}
+
+.linha__icone {
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	border-radius: 0;
+	background: none;
+	color: var(--on-surface-variant);
+	flex-shrink: 0;
+}
+
+.linha__corpo {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+
+.linha__titulo {
+	font-size: var(--text-body);
+	font-weight: var(--w-semibold);
+	letter-spacing: -0.01em;
+	color: var(--on-surface);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.linha__meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	font-size: var(--text-sm);
+	font-weight: var(--w-regular);
+	color: var(--on-surface-variant);
+	min-height: 18px;
+}
+
+.linha__meta .pendurada {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.linha__chevron {
+	color: var(--on-surface-variant);
+	flex-shrink: 0;
+}
+
+.linha--concluida .linha__titulo {
+	color: var(--on-surface-variant);
+	text-decoration: line-through;
+	text-decoration-thickness: 1.5px;
+}
+
+/* ----------------------------------------------------------------- botões */
+
+.botao {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--s-2);
+	min-height: 48px;
+	padding: 0 var(--s-6);
+	border-radius: var(--r-pill);
+	background: var(--secondary-container);
+	color: var(--on-secondary-container);
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	letter-spacing: 0.01em;
+	transition:
+		background var(--dur) var(--ease),
+		transform var(--dur-fast) var(--ease);
+}
+
+.botao:active {
+	transform: scale(0.97);
+}
+
+.botao[disabled] {
+	opacity: 0.38;
+	pointer-events: none;
+}
+
+.botao--primario {
+	background: var(--primary);
+	color: var(--on-primary);
+}
+
+.botao--texto {
+	min-height: 40px;
+	padding: 0 var(--s-3);
+	background: transparent;
+	color: var(--primary);
+}
+
+.botao--texto:active {
+	background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.botao--perigo {
+	background: var(--error-container);
+	color: var(--on-error-container);
+}
+
+.botao--perigo-solido {
+	background: var(--error);
+	color: var(--on-error);
+}
+
+.botao--bloco {
+	width: 100%;
+}
+
+.botao-icone {
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	border-radius: var(--r-pill);
+	color: var(--on-surface-variant);
+	flex-shrink: 0;
+	transition:
+		background var(--dur) var(--ease),
+		color var(--dur) var(--ease),
+		transform var(--dur-fast) var(--ease);
+}
+
+.botao-icone:active {
+	background: color-mix(in srgb, var(--on-surface) 10%, transparent);
+	transform: scale(0.94);
+}
+
+.botao-icone--pequeno {
+	width: 36px;
+	height: 36px;
+}
+
+.botao-icone[aria-pressed='true'] {
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+}
+
+.botao-icone--destaque {
+	background: var(--primary);
+	color: var(--on-primary);
+}
+
+/* ------------------------------------------------------------------ chips */
+
+.chips {
+	display: flex;
+	gap: var(--s-2);
+	overflow-x: auto;
+	overflow-y: hidden;
+	scrollbar-width: none;
+	/* A faixa de chips rola sozinha, nunca a página.
+	   Antes: `margin: 0 auto` sem `width` fazia o navegador usar largura de
+	   conteúdo (max-content) limitada por `--content-max` (760px). Num celular
+	   de 375px a faixa nascia com 760px, empurrava o documento e o app inteiro
+	   passava a arrastar para os lados — inclusive a barra inferior, que parecia
+	   "rolar junto". `width: 100%` com `min-width: 0` prende a faixa ao viewport
+	   e a rolagem horizontal fica só dentro dela. */
+	width: 100%;
+	min-width: 0;
+	max-width: var(--content-max);
+	margin: 0 auto;
+	padding: 2px var(--s-4);
+	scroll-snap-type: x proximity;
+	overscroll-behavior-x: contain;
+}
+
+.chips::-webkit-scrollbar {
+	display: none;
+}
+
+.chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-shrink: 0;
+	min-height: 40px;
+	padding: 0 var(--s-4);
+	border-radius: var(--r-pill);
+	background: var(--surface-container-high);
+	color: var(--on-surface-variant);
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+	letter-spacing: 0;
+	scroll-snap-align: start;
+	transition:
+		background var(--dur) var(--ease),
+		color var(--dur) var(--ease);
+}
+
+.chip[aria-pressed='true'],
+.chip--ativo {
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+	font-weight: var(--w-bold);
+}
+
+.chip--contorno {
+	background: transparent;
+	border: 1px solid var(--outline);
+}
+
+.chip--pequeno {
+	min-height: 28px;
+	padding: 0 10px;
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+}
+
+.chip__ponto {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.chip--acao {
+	background: transparent;
+	border: 1px dashed var(--outline);
+	color: var(--primary);
+}
+
+/* -------------------------------------------------------- grupo segmentado */
+
+.segmentado {
+	display: flex;
+	padding: 3px;
+	gap: 2px;
+	border-radius: var(--r-pill);
+	background: var(--surface-container-high);
+}
+
+.segmentado__item {
+	flex: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-width: 44px;
+	min-height: 44px;
+	padding: 0 var(--s-3);
+	border-radius: var(--r-pill);
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+	transition:
+		background var(--dur) var(--ease),
+		color var(--dur) var(--ease);
+}
+
+.segmentado__item[aria-pressed='true'] {
+	background: var(--primary);
+	color: var(--on-primary);
+	font-weight: var(--w-bold);
+}
+
+.segmentado--baixo {
+	background: var(--surface-container);
+}
+
+/* ---------------------------------------------------------------- campos */
+
+/* Base dos campos nativos que NÃO usam `.campo`.
+
+   Antes, todo `<input>` sem classe aparecia com a borda 2 px cinza-escura
+   padrão do WebView (e no escuro, com fundo branco): era o que fazia os campos
+   dos Ajustes e do Jarvis parecerem de outro aplicativo. `:where()` zera a
+   especificidade, então `.campo`, `.campo--compacto` e os campos próprios
+   (hora do Jarvis, nome do gatilho) continuam mandando — isto aqui só preenche
+   o que ninguém definiu.
+
+   `type=range`, `checkbox` e `file` ficam de fora: o primeiro ganha
+   `accent-color`, os outros são desenhados pelo sistema. */
+.tela :where(
+	input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']):not([type='color']):not([type='hidden']),
+	textarea,
+	select
+) {
+	min-height: 44px;
+	padding: 0 var(--s-3);
+	border: 0;
+	border-radius: var(--r-md);
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	font-size: 16px;
+}
+
+.tela :where(textarea) {
+	padding: var(--s-2) var(--s-3);
+	line-height: 1.4;
+	resize: vertical;
+}
+
+.tela :where(input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file'])):focus {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--primary);
+}
+
+/* O controle deslizante vinha com o azul do sistema em cima da paleta do app. */
+.tela :where(input[type='range']) {
+	accent-color: var(--primary);
+}
+
+.tela :where(input[type='checkbox'], input[type='radio']) {
+	accent-color: var(--primary);
+}
+
+.campo {
+	width: 100%;
+	min-height: 56px;
+	padding: 0 var(--s-4);
+	border-radius: var(--r-lg);
+	border: 0;
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	font-size: 16px;
+	font-weight: var(--w-medium);
+	transition:
+		box-shadow var(--dur) var(--ease),
+		background var(--dur) var(--ease);
+}
+
+.campo::placeholder {
+	color: var(--on-surface-variant);
+	font-weight: var(--w-regular);
+}
+
+.campo:focus {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--primary);
+	background: var(--surface-container);
+}
+
+.campo--compacto {
+	min-height: 44px;
+	padding: 0 var(--s-3);
+	border-radius: var(--r-md);
+}
+
+.campo--area {
+	min-height: 120px;
+	padding: var(--s-3) var(--s-4);
+	line-height: 1.5;
+	resize: vertical;
+}
+
+.campo-rotulo {
+	display: block;
+	margin-bottom: 6px;
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+	color: var(--on-surface-variant);
+}
+
+.campo-duplo {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: var(--s-3);
+}
+
+.formulario {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-4);
+	padding: var(--s-2) var(--s-4) var(--s-6);
+}
+
+.formulario__acoes {
+	display: flex;
+	gap: var(--s-2);
+	justify-content: flex-end;
+	padding-top: var(--s-2);
+}
+
+.formulario__acoes .botao {
+	flex: 1;
+}
+
+.nota {
+	font-size: var(--text-sm);
+	color: var(--on-surface-variant);
+	line-height: 1.5;
+}
+
+.nota--erro {
+	color: var(--error);
+	font-weight: var(--w-semibold);
+}
+
+.erro {
+	font-size: var(--text-sm);
+	font-weight: var(--w-semibold);
+	color: var(--error);
+}
+
+/* -------------------------------------------------------------- check box */
+
+.checkbox {
+	position: relative;
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	margin-left: -8px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	color: var(--primary);
+	transition: background var(--dur) var(--ease);
+}
+
+.checkbox:active {
+	background: color-mix(in srgb, var(--primary) 16%, transparent);
+}
+
+.checkbox__marca {
+	display: grid;
+	place-items: center;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	border: 2px solid currentColor;
+	transition:
+		background var(--dur) var(--ease),
+		border-color var(--dur) var(--ease),
+		transform var(--dur) var(--ease-spring);
+}
+
+.checkbox__marca svg {
+	opacity: 0;
+	transform: scale(0.5);
+	transition:
+		opacity var(--dur-fast) var(--ease),
+		transform var(--dur) var(--ease-spring);
+}
+
+.checkbox[aria-checked='true'] .checkbox__marca {
+	background: var(--primary);
+	border-color: var(--primary);
+	color: var(--on-primary);
+}
+
+.checkbox[aria-checked='true'] .checkbox__marca svg {
+	opacity: 1;
+	transform: scale(1);
+}
+
+.checkbox--pequeno {
+	width: 32px;
+	height: 32px;
+	margin-left: -4px;
+}
+
+.checkbox--pequeno .checkbox__marca {
+	width: 18px;
+	height: 18px;
+}
+
+/* ------------------------------------------------------------------ etiquetas */
+
+.etiqueta {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-height: 22px;
+	padding: 0 8px;
+	border-radius: var(--r-sm);
+	background: var(--surface-container-highest);
+	color: var(--on-surface-variant);
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	letter-spacing: 0.02em;
+}
+
+.etiqueta--atraso {
+	background: var(--error-container);
+	color: var(--on-error-container);
+}
+
+/* Prioridade como etiqueta: o rótulo escrito resolve o caso de quem não
+   distingue cor (a bandeira e o filete são reforço, não a única pista). */
+.etiqueta--prioridade {
+	background: var(--prioridade-1-container);
+	color: var(--prioridade-1);
+}
+
+.etiqueta--prioridade[data-prioridade='2'] {
+	background: var(--prioridade-2-container);
+	color: var(--prioridade-2);
+}
+
+.etiqueta--prioridade[data-prioridade='3'] {
+	background: var(--prioridade-3-container);
+	color: var(--prioridade-3);
+}
+
+.etiqueta--hoje {
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+}
+
+.etiqueta--suave {
+	background: color-mix(in srgb, var(--tertiary-container) 70%, transparent);
+	color: var(--on-tertiary-container);
+}
+
+/* ------------------------------------------------------------------- FAB */
+
+/* O FAB flutua sobre o fim da lista. Reserva uma faixa no rodapé do conteúdo
+   para o último item não ficar debaixo dele: na captura de um projeto, o botão
+   "Criar" cobria exatamente os atalhos de editar e excluir da última tarefa. */
+.fab-area {
+	position: fixed;
+	right: max(var(--s-4), calc((100vw - var(--content-max)) / 2 + var(--s-4)));
+	bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
+	z-index: 30;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: var(--s-3);
+}
+
+/* O botão é compacto por decisão de conteúdo, não por estilo: com o rótulo ao
+   lado ele tem 91 px de largura e, na altura de uma tarefa, cobria o atalho de
+   editar e a lixeira dela. Só o símbolo ocupa 48 px e cai na margem direita
+   que nenhuma linha usa (as linhas terminam antes, no padding do grupo). */
+.fab {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0;
+	width: 48px;
+	height: 48px;
+	padding: 0;
+	border-radius: var(--r-lg);
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	box-shadow: var(--elev-2);
+	transition:
+		transform var(--dur) var(--ease-spring),
+		background var(--dur) var(--ease);
+}
+
+/* O rótulo só existe para leitor de tela; na tela o símbolo "+" basta — é o
+   mesmo idioma do botão de adicionar dos cabeçalhos de seção. */
+.fab__rotulo {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+}
+
+/* O FAB é fixo e não se move: quem cede espaço é o conteúdo, com 80 px
+   reservados no rodapé (`.conteudo`), em todas as telas. A versão anterior
+   tentava deslocar o botão para um trecho livre a cada rolagem; em listas de
+   linha inteira ele não achava vão e desaparecia, tirando o acesso a criar
+   lembrete, evento, hábito e página. */
+.fab-area {
+	transition:
+		opacity var(--dur) var(--ease),
+		transform var(--dur) var(--ease);
+}
+
+/* Descer a página recolhe o botão (Material 3). Subir traz de volta em
+   qualquer ponto, e no topo ele está sempre visível. */
+.fab-area--oculto {
+	opacity: 0;
+	transform: translateY(16px) scale(0.9);
+	pointer-events: none;
+}
+
+.fab:active {
+	transform: scale(0.95);
+}
+
+.fab--pequeno {
+	height: 52px;
+	padding: 0 var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	box-shadow: var(--elev-1);
+}
+
+/* ------------------------------------------------------------------ avisos */
+
+.desfazer {
+	position: fixed;
+	left: 50%;
+	bottom: calc(var(--nav-h) + 92px + env(safe-area-inset-bottom));
+	z-index: 45;
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	width: min(92vw, 420px);
+	padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+	border-radius: var(--r-md);
+	background: var(--inverse-surface);
+	color: var(--inverse-on-surface);
+	box-shadow: var(--elev-3);
+	animation: sobe-aviso var(--dur-slow) var(--ease-spring);
+}
+
+/* Falha de escrita: mesma faixa, em vermelho de erro, para não ser confundida
+   com o "Concluída/Excluída — Desfazer". */
+.desfazer--erro {
+	background: var(--error-container);
+	color: var(--on-error-container);
+}
+
+.desfazer__texto {
+	flex: 1;
+	font-size: var(--text-sm);
+	font-weight: var(--w-medium);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.desfazer .botao--texto {
+	color: var(--inverse-primary);
+	font-weight: var(--w-bold);
+}
+
+@keyframes sobe-aviso {
+	from {
+		opacity: 0;
+		transform: translate(-50%, 12px);
+	}
+	to {
+		opacity: 1;
+		transform: translate(-50%, 0);
+	}
+}
+
+/* --------------------------------------------------------------- esqueletos */
+
+.esqueleto {
+	padding: var(--s-4);
+}
+
+.esqueleto__linha {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: var(--s-2) 0;
+}
+
+.esqueleto__titulo,
+.esqueleto__meta {
+	display: block;
+	height: 14px;
+	border-radius: var(--r-pill);
+	background: var(--surface-container-high);
+	animation: pulsa 1.4s var(--ease) infinite;
+}
+
+.esqueleto__titulo {
+	width: 62%;
+}
+
+.esqueleto__meta {
+	width: 38%;
+	height: 10px;
+}
+
+@keyframes pulsa {
+	0%,
+	100% {
+		opacity: 0.55;
+	}
+	50% {
+		opacity: 1;
+	}
+}
+
+/* ------------------------------------------------------------------ rodapé */
+
+.rodape-versao {
+	padding: var(--s-6) var(--s-4) 0;
+	text-align: center;
+	font-size: var(--text-xs);
+	font-weight: var(--w-medium);
+	color: var(--on-surface-variant);
+}
+
+/* Assinatura da marca no fim dos Ajustes: a frase explica o nome, que não é
+   dicionário batido, sem ocupar espaço no meio do conteúdo. */
+.rodape-marca {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	/* O FAB flutua sobre o conteúdo: sem esta folga a assinatura fica embaixo
+	   dele na tela de Ajustes. */
+	padding: var(--s-2) var(--s-4) calc(96px + env(safe-area-inset-bottom));
+	text-align: center;
+}
+
+.rodape-marca__palavra {
+	font-family: var(--font);
+	font-size: var(--text-sm);
+	font-weight: var(--w-heavy);
+	letter-spacing: -0.028em;
+	color: var(--on-surface);
+}
+
+.rodape-marca__frase {
+	font-size: var(--text-xs);
+	color: var(--on-surface-variant);
+	letter-spacing: 0.01em;
+}
+
+/* -------------------------------------------------- acessibilidade: toque */
+
+/* O alvo mínimo de 44 px fica no ::after para não inflar o desenho. */
+.secao-acao,
+.botao--texto,
+.chip--pequeno {
+	position: relative;
+}
+
+.secao-acao::after,
+.botao--texto::after {
+	content: '';
+	position: absolute;
+	inset: -6px -4px;
+	border-radius: inherit;
+}
+
+/* --------------------------------------------------------------- desktop */
+
+@media (min-width: 900px) {
+	.conteudo {
+		padding-bottom: var(--s-12);
+	}
+
+	.fab-area {
+		bottom: calc(var(--s-8) + env(safe-area-inset-bottom));
+	}
+}
+
+/* Campo de hex dentro da amostra de cor personalizada (Ajustes). */
+/* "+ Nova cor": mesma forma das amostras, sem competir com elas. */
+.amostra-cor--nova {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 1px;
+	background: color-mix(in srgb, var(--on-surface) 6%, transparent);
+	border: 1px dashed color-mix(in srgb, var(--on-surface-variant) 55%, transparent);
+	color: var(--on-surface-variant);
+}
+
+.amostra-cor__rotulo {
+	font-size: 9px;
+	font-weight: var(--w-bold);
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+/* ---------------------------------------------------- seletor de cor-semente */
+
+.seletor-cor {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-4);
+	padding: var(--s-2) var(--s-4) var(--s-4);
+}
+
+.seletor-cor__mostra {
+	display: flex;
+	align-items: flex-end;
+	justify-content: flex-start;
+	height: 108px;
+	padding: var(--s-4);
+	border-radius: var(--r-2xl);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-surface) 12%, transparent);
+}
+
+.seletor-cor__hex-grande {
+	padding: 4px 10px;
+	border-radius: var(--r-pill);
+	background: color-mix(in srgb, #000 55%, transparent);
+	color: #fff;
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	letter-spacing: 0.06em;
+	font-variant-numeric: tabular-nums;
+}
+
+.seletor-cor__canal {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+}
+
+.seletor-cor__slider {
+	width: 100%;
+	height: 28px;
+	margin: 0;
+	border-radius: var(--r-pill);
+	-webkit-appearance: none;
+	appearance: none;
+	background: var(--surface-container-highest);
+	outline: none;
+}
+
+.seletor-cor__slider--matiz {
+	background: linear-gradient(
+		to right,
+		#ff0000 0%,
+		#ffff00 17%,
+		#00ff00 33%,
+		#00ffff 50%,
+		#0000ff 67%,
+		#ff00ff 83%,
+		#ff0000 100%
+	);
+}
+
+/* Polegar: alto o bastante para o dedo no celular. */
+.seletor-cor__slider::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: #fff;
+	border: 2px solid color-mix(in srgb, #000 25%, transparent);
+	box-shadow: 0 2px 6px color-mix(in srgb, #000 35%, transparent);
+	cursor: pointer;
+}
+
+.seletor-cor__slider::-moz-range-thumb {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: #fff;
+	border: 2px solid color-mix(in srgb, #000 25%, transparent);
+	box-shadow: 0 2px 6px color-mix(in srgb, #000 35%, transparent);
+	cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ Jarvis */
+
+/*
+   Tela do Jarvis. Reaproveita os tokens do app: nada de cor nova, nada de
+   componente paralelo. O selo de nível é o único elemento com cor própria,
+   porque "urgente" e "informativo" precisam ser distinguíveis de relance.
+*/
+
+.jarvis-atalho {
+	position: relative;
+}
+
+.jarvis-atalho__contagem {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	min-width: 18px;
+	height: 18px;
+	padding: 0 5px;
+	border-radius: var(--r-pill);
+	background: var(--error);
+	color: var(--on-error);
+	font-size: 11px;
+	font-weight: var(--w-bold);
+	line-height: 18px;
+	text-align: center;
+}
+
+.jarvis-itens {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.jarvis-item {
+	border-radius: var(--r-2xl);
+	background: var(--surface-container);
+	overflow: hidden;
+}
+
+.jarvis-item__corpo {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+	width: 100%;
+	padding: var(--s-4);
+	text-align: left;
+}
+
+.jarvis-item__titulo {
+	font-size: var(--text-base);
+	font-weight: var(--w-bold);
+	color: var(--on-surface);
+}
+
+.jarvis-item__detalhe {
+	font-size: var(--text-sm);
+	line-height: 1.45;
+	color: var(--on-surface-variant);
+}
+
+.jarvis-item__acoes {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--s-1);
+	padding: 0 var(--s-3) var(--s-2);
+}
+
+.jarvis-selo {
+	display: inline-flex;
+	align-items: center;
+	height: 22px;
+	padding: 0 8px;
+	border-radius: var(--r-pill);
+	font-size: 11px;
+	font-weight: var(--w-bold);
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.jarvis-selo--urgente {
+	background: var(--error-container);
+	color: var(--on-error-container);
+}
+
+.jarvis-selo--atencao {
+	background: var(--tertiary-container);
+	color: var(--on-tertiary-container);
+}
+
+.jarvis-selo--oportunidade {
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+}
+
+.jarvis-selo--informativo {
+	background: var(--surface-container-highest);
+	color: var(--on-surface-variant);
+}
+
+.jarvis-controle {
+	padding: 0 var(--s-4);
+}
+
+.jarvis-linha {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-4);
+	padding: var(--s-4) 0;
+	border-bottom: 1px solid var(--outline-variant);
+}
+
+.jarvis-linha:last-child {
+	border-bottom: none;
+}
+
+.jarvis-linha > span {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.jarvis-linha strong {
+	font-size: var(--text-sm);
+	color: var(--on-surface);
+}
+
+.jarvis-linha small {
+	font-size: var(--text-xs);
+	line-height: 1.4;
+	color: var(--on-surface-variant);
+}
+
+.jarvis-linha--coluna {
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.jarvis-linha input[type='range'] {
+	width: 100%;
+}
+
+.jarvis-linha input[type='checkbox'] {
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+	accent-color: var(--primary);
+}
+
+.jarvis-horas {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	flex-wrap: wrap;
+}
+
+.jarvis-horas label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-xs);
+	color: var(--on-surface-variant);
+}
+
+.jarvis-horas input[type='number'] {
+	width: 56px;
+	min-height: 36px;
+	padding: 0 8px;
+	border-radius: var(--r-md);
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	font-size: var(--text-sm);
+	text-align: center;
+}
+
+.jarvis-horas__liga input {
+	width: 18px;
+	height: 18px;
+	accent-color: var(--primary);
+}
+
+.jarvis-diagnostico {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
+	padding: var(--s-4);
+	font-size: var(--text-sm);
+	line-height: 1.5;
+	color: var(--on-surface-variant);
+}
+
+.jarvis-diagnostico strong {
+	color: var(--on-surface);
+}
+
+.jarvis-modo-explicacao {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.jarvis-modo-explicacao p {
+	font-size: var(--text-sm);
+	color: var(--on-surface-variant);
+}
+
+.jarvis-item__mais {
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	color: var(--primary);
+}
+
+/* ---------------------------------------------------------------------------
+   Conversa do Jarvis.
+
+   Regra da tela: a página NÃO rola. Só o histórico rola, entre o topo e o
+   campo. Antes tudo era um fluxo só, dentro de `.tela` com `min-height`, e
+   dois defeitos vinham daí:
+
+   1. o texto encostava na borda porque não havia o contêiner `.conteudo` das
+      outras telas (o padrão do app é 16 px de cada lado e 720 px de largura);
+   2. a confirmação de ações, que vinha depois do campo no fluxo, nascia
+      ABAIXO do histórico: com 12 mensagens ela caía em y=945 num viewport de
+      844 — fora da tela, sem botão para confirmar.
+
+   Com `height` (e não `min-height`) o flex consegue distribuir: histórico com
+   `flex: 1` e `overflow-y: auto`, campo com altura própria. O bloco de
+   confirmação saiu daqui e virou Folha.
+   --------------------------------------------------------------------------- */
+
+.tela--conversa {
+	/*
+	   Altura da tela = área visível (definida pelo JS a partir do
+	   `visualViewport`) menos a barra inferior. Sem o JS, cai no `100dvh`
+	   normal. `--conversa-desconto` vira 0 quando o teclado está aberto: a
+	   barra some atrás do teclado e descontá-la deixaria uma faixa preta.
+	*/
+	height: calc(
+		var(--altura-visivel, 100dvh) - var(--conversa-desconto, var(--nav-h)) - 1px -
+			env(safe-area-inset-bottom)
+	);
+	min-height: 0;
+}
+
+.conteudo--conversa {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	/* Sem o espaço reservado ao FAB: esta tela não tem botão de criar. */
+	padding-bottom: 0;
+	padding-left: var(--s-4);
+	padding-right: var(--s-4);
+}
+
+.conversa {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	gap: var(--s-2);
+}
+
+.conversa__historico {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
+	padding: var(--s-2) 0 var(--s-3);
+	/* O fim da lista fica alguns px acima do campo, para a última bolha não
+	   parecer colada nele. */
+	scroll-padding-bottom: var(--s-4);
+}
+
+/*
+   Conversa curta fica encostada no campo, não no topo.
+
+   `justify-content: flex-end` num contêiner que rola tem um defeito conhecido:
+   quando o conteúdo passa da altura, o começo é cortado e não dá para rolar
+   até ele. Um espaçador de altura zero com `margin-top: auto` empurra o
+   conteúdo para baixo sem esse problema — quando não há espaço sobrando, ele
+   não ocupa nada.
+*/
+.conversa__historico::before {
+	content: '';
+	margin-top: auto;
+	flex-shrink: 0;
+}
+
+/* Sem nenhuma mensagem, a saudação é um texto de abertura: fica no TOPO, como
+   o começo de um caderno. Empurrada para baixo ela parecia legenda do campo. */
+.conversa__historico[data-mensagens='nao']::before {
+	margin-top: 0;
+}
+
+.conversa__lista {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.conversa__fala {
+	max-width: 88%;
+	padding: var(--s-3) var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	font-size: var(--text-sm);
+	line-height: 1.5;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.conversa__fala--minha {
+	align-self: flex-end;
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+}
+
+/* ------------------------------------------------------------- o composer */
+
+/* Fica FORA da área rolável e dentro do contêiner padrão: é o que garante que
+   o campo nunca saia da tela, com histórico curto ou longo. */
+.conversa__composer {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	flex-shrink: 0;
+	padding: var(--s-2) 0 calc(var(--s-3) + env(safe-area-inset-bottom));
+	background: var(--background);
+}
+
+.conversa__campo {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--s-2);
+}
+
+/* A caixa imita o campo de busca do app: superfície, sem borda, foco na cor
+   primária. A borda padrão do WebView (2 px preta) era o que aparecia antes. */
+.conversa__campo-caixa {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	padding: var(--s-2) var(--s-3);
+	border-radius: var(--r-2xl);
+	background: var(--surface-container-high);
+	transition: box-shadow var(--dur) var(--ease);
+}
+
+.conversa__campo-caixa:focus-within {
+	box-shadow: 0 0 0 2px var(--primary);
+}
+
+.conversa__campo textarea {
+	flex: 1;
+	width: 100%;
+	min-height: 28px;
+	max-height: 132px;
+	padding: 2px 0;
+	border: 0;
+	outline: none;
+	background: transparent;
+	color: var(--on-surface);
+	font: inherit;
+	font-size: 16px;
+	line-height: 1.4;
+	resize: none;
+	overflow-y: auto;
+}
+
+.conversa__campo textarea::placeholder {
+	color: var(--on-surface-variant);
+}
+
+.conversa__enviar {
+	min-height: 44px;
+	padding: 0 var(--s-4);
+	border-radius: var(--r-pill);
+	flex-shrink: 0;
+}
+
+/* No celular o rótulo sai de perto do ícone quando a fonte está grande: o
+   botão vira quadrado de 44 px com o ícone, e o nome fica só no aria-label. */
+@media (max-width: 379px) {
+	.conversa__enviar-rotulo {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+	}
+
+	.conversa__enviar {
+		width: 44px;
+		padding: 0;
+	}
+}
+
+.conversa__desfazer {
+	align-self: flex-start;
+	min-height: 36px;
+	font-size: var(--text-xs);
+}
+
+.conversa__falta-chave {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	flex-wrap: wrap;
+	padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--surface-container);
+	font-size: var(--text-sm);
+	line-height: 1.4;
+	color: var(--on-surface-variant);
+}
+
+.conversa__falta-chave .botao {
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+
+/* ------------------------------------------------- prévia das ações (folha) */
+
+/* A prévia mora dentro de uma Folha: aqui é só o conteúdo, com o mesmo
+   espaçamento dos outros formulários do app. O limite de 45vh com rolagem
+   própria saiu — quem limita e rola agora é o corpo da folha. */
+.conversa__previa-lista {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.conversa__previa {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--s-2);
+	padding: var(--s-3) var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--surface-container);
+}
+
+.conversa__previa p {
+	font-size: var(--text-sm);
+	line-height: 1.5;
+	color: var(--on-surface);
+	overflow-wrap: anywhere;
+}
+
+.conversa__previa .nota {
+	color: var(--on-surface-variant);
+}
+
+.conversa__fila {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	padding: var(--s-3) var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--surface-container-low);
+	border: 1px solid var(--outline-variant);
+}
+
+
+.conversa__fila-titulo {
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	color: var(--on-surface);
+}
+
+.conversa__fila ul {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.conversa__fila li {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	font-size: var(--text-sm);
+	color: var(--on-surface);
+}
+
+.jarvis-fatos {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.jarvis-fatos li {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--s-2);
+	padding: 6px 0;
+	border-bottom: 1px solid var(--outline-variant);
+	font-size: var(--text-sm);
+	color: var(--on-surface);
+}
+
+.jarvis-fatos li:last-child {
+	border-bottom: none;
+}
+
+.jarvis-gatilho-novo {
+	display: flex;
+	align-items: flex-end;
+	gap: var(--s-2);
+	flex-wrap: wrap;
+}
+
+.jarvis-gatilho-novo input[type='text'] {
+	flex: 1;
+	min-width: 140px;
+	min-height: 44px;
+	padding: 0 var(--s-3);
+	border-radius: var(--r-md);
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	font-size: var(--text-sm);
+}
+
+.jarvis-gatilho-novo label {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: var(--text-xs);
+	color: var(--on-surface-variant);
+}
+
+.jarvis-gatilho-novo input[type='number'] {
+	width: 64px;
+	min-height: 44px;
+	padding: 0 8px;
+	border-radius: var(--r-md);
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	text-align: center;
+}
+
+/* ------------------------------------------------- conversa flutuante (FAB) */
+
+/*
+   O botão de conversar fica logo ACIMA do Criar, com metade do peso visual:
+   fundo de superfície em vez de cor primária, 44 px em vez de 56, sem rótulo.
+   A hierarquia é intencional — criar é o comando; conversar é presença.
+*/
+.fab--conversa {
+	width: 44px;
+	height: 44px;
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+	box-shadow:
+		0 2px 6px color-mix(in srgb, var(--on-surface) 12%, transparent),
+		0 1px 2px color-mix(in srgb, var(--on-surface) 8%, transparent);
+}
+
+.fab--conversa:active {
+	background: var(--surface-container-highest);
+}
+
+/* ---------------------------------------------------- tela de conversa */
+
+/*
+   Sem FAB nesta tela (quem está aqui é para conversar, não para criar).
+   O layout (altura travada, histórico rolando, composer fixo) está definido
+   junto dos componentes da conversa, na seção "conversa do Jarvis".
+*/
+
+
+/* --------------------------------------------------------------------------
+   Aviso no topo
+
+   Fica sobre o conteúdo, logo abaixo do cabeçalho, sem empurrar a tela. A
+   caixa é o alvo do gesto; o contêiner só reserva o lugar.
+   -------------------------------------------------------------------------- */
+
+.aviso-topo {
+	position: fixed;
+	top: calc(env(safe-area-inset-top) + var(--s-2));
+	left: 50%;
+	transform: translateX(-50%);
+	width: min(94vw, 460px);
+	z-index: 60;
+	pointer-events: none;
+}
+
+.aviso-topo__caixa {
+	pointer-events: auto;
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	padding: var(--s-3) var(--s-2) var(--s-3) var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--surface-container-highest);
+	color: var(--on-surface);
+	box-shadow: var(--elev-3);
+	border: 1px solid var(--outline-variant);
+	touch-action: pan-y;
+	transition:
+		transform 160ms var(--ease),
+		opacity 160ms var(--ease);
+	animation: desce-aviso var(--dur-slow) var(--ease-spring);
+}
+
+.aviso-topo__caixa--atencao {
+	border-color: var(--primary);
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+}
+
+.aviso-topo__caixa--erro {
+	border-color: var(--error);
+	background: var(--error-container);
+	color: var(--on-error-container);
+}
+
+.aviso-topo__caixa--saindo {
+	transition:
+		transform 180ms var(--ease),
+		opacity 180ms var(--ease);
+}
+
+.aviso-topo__icone {
+	display: inline-flex;
+	flex-shrink: 0;
+	opacity: 0.85;
+}
+
+.aviso-topo__texto {
+	flex: 1;
+	font-size: var(--text-sm);
+	line-height: 1.4;
+	min-width: 0;
+}
+
+.aviso-topo__fechar {
+	flex-shrink: 0;
+}
+
+/* Pequeno traço no topo da caixa: sugere que ela sai para cima. */
+.aviso-topo__alca {
+	display: block;
+	width: 36px;
+	height: 3px;
+	margin: 6px auto 0;
+	border-radius: 2px;
+	background: currentColor;
+	opacity: 0.18;
+}
+
+@keyframes desce-aviso {
+	from {
+		transform: translateY(-12px);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0);
+		opacity: 1;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.aviso-topo__caixa {
+		animation: none;
+		transition: none;
+	}
+}

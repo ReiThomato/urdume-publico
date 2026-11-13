@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-BR">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#1C1B1F" />
+		<meta name="description" content="Tarefas, projetos, lembretes e páginas de desenho num só lugar." />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+		<meta name="apple-mobile-web-app-title" content="Urdume" />
+		<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+		<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+		<title>Urdume</title>
+
+		<!--
+			Tema antes do primeiro desenho.
+
+			O app guarda as variáveis já resolvidas em `urdume.tema.cores`, e este
+			script as aplica de forma síncrona, ainda no <head>. Sem isso, o HTML
+			pintava na cor clara padrão e o app só corrigia depois de carregar o
+			React e abrir o banco — era a "cor antiga" que aparecia a cada abertura.
+			Um script inline (e não um módulo) roda antes de qualquer pintura.
+		-->
+		<script>
+			;(function () {
+				try {
+					var bruto =
+						localStorage.getItem('urdume.tema.cores') ||
+						localStorage.getItem('rabisco.tema.cores')
+					if (!bruto) return
+					var cores = JSON.parse(bruto)
+					var raiz = document.documentElement
+					for (var chave in cores) {
+						if (Object.prototype.hasOwnProperty.call(cores, chave)) {
+							raiz.style.setProperty(chave, cores[chave])
+						}
+					}
+					if (cores['--background']) {
+						var meta = document.querySelector('meta[name="theme-color"]')
+						if (meta) meta.setAttribute('content', cores['--background'])
+					}
+					if (cores.modo) raiz.dataset.modo = cores.modo
+					if (cores.escuro) raiz.dataset.tema = cores.escuro
+				} catch (erro) {
+					/* Sem espelho: o CSS padrão cobre o primeiro desenho. */
+				}
+			})()
+		</script>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script type="module" src="/src/main.tsx"></script>
+	</body>
+</html>

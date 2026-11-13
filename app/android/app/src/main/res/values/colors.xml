@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#8f4c35</color>
+    <color name="colorPrimaryDark">#8f4c35</color>
+    <color name="colorAccent">#ffdbd0</color>
+    <color name="nexoFundo">#fff4f1</color>
+</resources>

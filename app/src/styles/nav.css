@@ -1,0 +1,195 @@
+/* ---------------------------------------------------------------------------
+   Navegação — barra inferior Material 3 (celular) e rail (tablet/desktop).
+   A barra é sólida, encosta na borda inferior e respeita a área segura do
+   gesto do Android. Nada de pílula flutuante por cima do conteúdo.
+   --------------------------------------------------------------------------- */
+
+.shell {
+	display: flex;
+	flex-direction: column;
+	min-height: 100dvh;
+	background: var(--background);
+}
+
+.shell-main {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+}
+
+/* ------------------------------------------------------------------ barra */
+
+.navegacao {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 40;
+	padding-bottom: env(safe-area-inset-bottom);
+	background: var(--surface-container);
+	border-top: 1px solid color-mix(in srgb, var(--outline-variant) 55%, transparent);
+}
+
+.destinos {
+	position: relative;
+	display: flex;
+	align-items: stretch;
+	justify-content: space-between;
+	height: var(--nav-h);
+	max-width: var(--content-max);
+	margin: 0 auto;
+	padding: 0 var(--s-1);
+}
+
+/* Indicador único que desliza entre os itens.
+   Antes cada item animava o próprio fundo com uma curva de mola (overshoot):
+   ao trocar de tela, dois itens animavam ao mesmo tempo e o fundo "piscava"
+   até assentar. Um indicador só, movido por transform, é uma animação única e
+   composta na GPU. O `data-ativo` é a posição (0..4); sem destino válido, o
+   indicador fica escondido. */
+.destinos__indicador {
+	position: absolute;
+	top: calc(50% - 22px);
+	left: var(--s-1);
+	width: calc((100% - var(--s-1) * 2) / 6);
+	height: 28px;
+	border-radius: var(--r-pill);
+	background: var(--secondary-container);
+	transform: translateX(calc(var(--destino-ativo, 0) * 100%));
+	transform-origin: center;
+	transition:
+		transform var(--dur) var(--ease),
+		opacity var(--dur-fast) var(--ease);
+	pointer-events: none;
+	z-index: 0;
+}
+
+.destinos:not([data-ativo='0']):not([data-ativo='1']):not([data-ativo='2']):not([data-ativo='3']):not([data-ativo='4']):not([data-ativo='5'])
+	.destinos__indicador {
+	opacity: 0;
+}
+
+.destinos[data-ativo='0'] {
+	--destino-ativo: 0;
+}
+.destinos[data-ativo='1'] {
+	--destino-ativo: 1;
+}
+.destinos[data-ativo='2'] {
+	--destino-ativo: 2;
+}
+.destinos[data-ativo='3'] {
+	--destino-ativo: 3;
+}
+.destinos[data-ativo='4'] {
+	--destino-ativo: 4;
+}
+.destinos[data-ativo='5'] {
+	--destino-ativo: 5;
+}
+
+.destino {
+	position: relative;
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	min-width: 0;
+	padding: 4px 2px;
+	color: var(--on-surface-variant);
+	font-size: 10.5px;
+	font-weight: var(--w-semibold);
+	letter-spacing: 0.01em;
+	transition: color var(--dur) var(--ease);
+}
+
+/* O ícone em si não carrega mais o fundo: quem desenha a pílula do item
+   ativo é o indicador único acima. Aqui fica só o alvo e o estado. */
+.destino__icone {
+	position: relative;
+	z-index: 1;
+	display: grid;
+	place-items: center;
+	width: 56px;
+	height: 28px;
+	border-radius: var(--r-pill);
+	transition: color var(--dur) var(--ease);
+}
+
+.destino[aria-current='page'] {
+	color: var(--on-secondary-container);
+	font-weight: var(--w-bold);
+}
+
+.destino:active .destino__icone {
+	transform: scale(0.9);
+}
+
+.destino__rotulo {
+	max-width: 100%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* O "+" central, quando houver, é um FAB de verdade — não um destino. */
+.destino--criar .destino__icone {
+	width: 52px;
+	height: 52px;
+	border-radius: var(--r-lg);
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+	margin-top: -10px;
+	box-shadow: var(--elev-1);
+}
+
+/* --------------------------------------------------------------------- rail */
+
+@media (min-width: 900px) {
+	.shell-main {
+		padding-left: var(--rail-w);
+	}
+
+	.navegacao {
+		top: 0;
+		right: auto;
+		width: var(--rail-w);
+		border-top: 0;
+		border-right: 1px solid color-mix(in srgb, var(--outline-variant) 55%, transparent);
+		padding-bottom: 0;
+		padding-top: env(safe-area-inset-top);
+	}
+
+	.destinos {
+		flex-direction: column;
+		justify-content: flex-start;
+		gap: var(--s-2);
+		height: auto;
+		padding: var(--s-4) var(--s-2);
+	}
+
+	/* No rail o indicador desliza na VERTICAL, e cada item ocupa uma faixa de
+	   72 px + 8 de gap = 80 px. A altura é a do item ativo, não 32 px. */
+	.destinos__indicador {
+		top: var(--s-4);
+		left: var(--s-2);
+		width: calc(100% - var(--s-2) * 2);
+		height: 72px;
+		border-radius: var(--r-lg);
+		transform: translateY(calc(var(--destino-ativo, 0) * 80px));
+	}
+
+	.destino {
+		flex: 0 0 auto;
+		min-height: 72px;
+		border-radius: var(--r-lg);
+	}
+
+	.destino__icone {
+		width: 56px;
+		height: 32px;
+	}
+}

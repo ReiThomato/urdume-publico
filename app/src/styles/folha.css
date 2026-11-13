@@ -1,0 +1,144 @@
+/* ---------------------------------------------------------------------------
+   Folha — modal que sobe de baixo (celular) e vira diálogo centrado (desktop).
+   Material 3 Expressive: canto superior bem arredondado, arrasto visível,
+   título grande e ações circulares no rodapé.
+   --------------------------------------------------------------------------- */
+
+.folha-fundo {
+	position: fixed;
+	inset: 0;
+	z-index: 80;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	background: color-mix(in srgb, var(--scrim) 42%, transparent);
+	animation: fundo-entra var(--dur) var(--ease);
+}
+
+.folha {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 600px;
+	max-height: calc(100dvh - env(safe-area-inset-top) - 24px);
+	background: var(--surface-container-low);
+	border-radius: var(--r-3xl) var(--r-3xl) 0 0;
+	box-shadow: var(--elev-3);
+	padding-bottom: env(safe-area-inset-bottom);
+	animation: folha-sobe var(--dur-slow) var(--ease-emphasized);
+	overflow: hidden;
+}
+
+.folha__alca {
+	display: flex;
+	justify-content: center;
+	padding: 8px 0 4px;
+	touch-action: none;
+	cursor: grab;
+	flex-shrink: 0;
+}
+
+.folha__alca:active {
+	cursor: grabbing;
+}
+
+.folha__puxador {
+	width: 32px;
+	height: 4px;
+	border-radius: var(--r-pill);
+	background: var(--outline-variant);
+	flex-shrink: 0;
+}
+
+.folha__cabecalho {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	padding: var(--s-4) var(--s-5) var(--s-2);
+	flex-shrink: 0;
+}
+
+.folha__texto {
+	flex: 1;
+	min-width: 0;
+}
+
+.folha__titulo {
+	font-size: var(--text-headline);
+	font-weight: var(--w-heavy);
+	line-height: 1.1;
+	letter-spacing: -0.03em;
+	color: var(--on-surface);
+}
+
+.folha__sobre {
+	margin-top: 2px;
+	font-size: var(--text-sm);
+	color: var(--on-surface-variant);
+}
+
+/* A folha rola por dentro: o cabeçalho fica parado e o teclado não corta o
+   começo do formulário. */
+.folha__corpo {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
+}
+
+.folha__rodape {
+	display: flex;
+	gap: var(--s-3);
+	align-items: center;
+	padding: var(--s-3) var(--s-5) var(--s-4);
+	border-top: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+	background: var(--surface-container-low);
+	flex-shrink: 0;
+}
+
+.folha__rodape .botao {
+	flex: 1;
+}
+
+@keyframes fundo-entra {
+	from {
+		opacity: 0;
+	}
+}
+
+@keyframes folha-sobe {
+	from {
+		transform: translateY(28px);
+		opacity: 0;
+	}
+}
+
+@media (min-width: 900px) {
+	.folha-fundo {
+		align-items: center;
+		padding: var(--s-6);
+	}
+
+	.folha {
+		border-radius: var(--r-3xl);
+		max-height: min(86dvh, 800px);
+		animation: folha-surge var(--dur-slow) var(--ease-emphasized);
+	}
+
+	.folha__alca {
+		display: none;
+	}
+
+	.folha__puxador {
+		display: none;
+	}
+}
+
+@keyframes folha-surge {
+	from {
+		transform: scale(0.96);
+		opacity: 0;
+	}
+}

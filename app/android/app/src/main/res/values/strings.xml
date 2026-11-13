@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Urdume Público</string>
+    <string name="title_activity_main">Urdume Público</string>
+    <string name="package_name">app.urdume.publico</string>
+    <string name="custom_url_scheme">app.urdume.publico</string>
+</resources>
