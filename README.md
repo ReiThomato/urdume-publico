@@ -31,7 +31,7 @@
 
 ## Why this exists
 
-Most productivity apps ask for an account, keep your data on a server you cannot
+Many productivity apps ask for an account, keep your data on a server you cannot
 see, and add an AI assistant that bills you through a proxy. Urdume Público takes
 the opposite route:
 
@@ -99,7 +99,7 @@ Stated up front so nobody expects the wrong thing:
 | Account, login, cloud | The database is local. There is no server. |
 | Sync between devices | Not part of this public variant; each device is independent. |
 | Drawing board | Removed for licensing: tldraw has its own terms. |
-| AI without your key | No embedded key, no proxy, no free tier. |
+| AI without your key | No embedded key and no proxy; you pay your provider directly. |
 | iOS version | Android and the browser only. |
 | Home-screen widget | Not implemented. |
 | Automatic backup | Android backup is disabled on purpose, so only the export you make exists. |
