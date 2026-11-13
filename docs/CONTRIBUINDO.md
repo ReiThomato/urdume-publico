@@ -8,7 +8,7 @@ descrevendo o problema — economiza tempo dos dois lados.
 ```bash
 npm install
 npm run dev      # navegador, com recarga rápida
-npm test         # 280 testes
+npm test         # 295 testes
 npx tsc -b       # tipos
 ```
 

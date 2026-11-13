@@ -93,7 +93,7 @@ hábito.
 
 ## Testes
 
-`npm test` roda 280 testes. Os que protegem decisões, não funções:
+`npm test` roda 295 testes. Os que protegem decisões, não funções:
 
 - `db/migracao.test.ts` — abrir bancos de versões antigas sem perder dado
 - `lib/jarvis/provedores.test.ts` — os três dialetos, sem rede

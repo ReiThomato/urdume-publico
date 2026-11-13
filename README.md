@@ -13,7 +13,7 @@ IA que roda **na sua chave**. Sem conta, sem servidor do autor, sem telemetria.
 
 > ## ⚠️ Beta
 >
-> Este app está em **beta**. Funciona, tem 280 testes automatizados, mas não
+> Este app está em **beta**. Funciona, tem 295 testes automatizados, mas não
 > passou por uso prolongado em muitos aparelhos. Espere encontrar defeitos.
 > Leia [Limites e falhas conhecidas](docs/LIMITES.md) antes de confiar seus dados
 > a ele — e exporte um backup de vez em quando.
