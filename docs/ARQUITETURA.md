@@ -114,7 +114,7 @@ a fazia aparecer como vencida no dia seguinte.
 
 ## Testes
 
-`npm test` roda **569 testes** em 54 arquivos. Os que protegem decisões, não
+`npm test` roda **572 testes** em 54 arquivos. Os que protegem decisões, não
 funções:
 
 - `db/migracao.test.ts` — abrir bancos de versões antigas sem perder dado

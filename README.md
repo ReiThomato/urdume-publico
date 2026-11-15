@@ -8,7 +8,7 @@
     <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&amp;logoColor=white" />
     <img alt="TypeScript 5.8" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&amp;logoColor=white" />
     <img alt="Platform: Android and web" src="https://img.shields.io/badge/platform-Android%20%C2%B7%20web-3DDC84?logo=android&amp;logoColor=white" />
-    <img alt="Tests: 571 passing" src="https://img.shields.io/badge/tests-571%20passing-2EA043" />
+    <img alt="Tests: 572 passing" src="https://img.shields.io/badge/tests-572%20passing-2EA043" />
     <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-D96C47" />
     <img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-6E7681" />
   </p>
@@ -22,7 +22,7 @@
 > language-neutral.
 
 > [!WARNING]
-> **Beta.** The app works and has 571 automated tests, but it has not seen
+> **Beta.** The app works and has 572 automated tests, but it has not seen
 > prolonged use on many devices. Expect defects. Read
 > [known limits](docs/LIMITES.md) (Portuguese) before entrusting it with your
 > data, and export a backup from time to time.
@@ -266,7 +266,7 @@ conventions described in [docs/CONTRIBUINDO.md](docs/CONTRIBUINDO.md).
 ```bash
 cd app
 npm ci
-npm test        # 571 tests
+npm test        # 572 tests
 npx tsc -b      # type check
 ```
 
