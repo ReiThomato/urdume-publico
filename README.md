@@ -1,66 +1,160 @@
-# Urdume Público
+<div align="center">
+  <img src="app/Assets/marca/urdume-icone.svg" width="84" alt="Urdume Público app icon" />
+  <h1>Urdume Público</h1>
+  <p><strong>Your day, on your device.</strong><br />
+  Tasks, projects, habits and calendar with an AI assistant that runs on your own API key.</p>
 
-Um app de rotina — tarefas, projetos, hábitos e agenda — com um assistente de
-IA que roda **na sua chave**. Sem conta, sem servidor do autor, sem telemetria.
+  <p>
+    <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&amp;logoColor=white" />
+    <img alt="TypeScript 5.8" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&amp;logoColor=white" />
+    <img alt="Platform: Android and web" src="https://img.shields.io/badge/platform-Android%20%C2%B7%20web-3DDC84?logo=android&amp;logoColor=white" />
+    <img alt="Tests: 571 passing" src="https://img.shields.io/badge/tests-571%20passing-2EA043" />
+    <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-D96C47" />
+    <img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-6E7681" />
+  </p>
 
-| Hoje | Tarefas | Projetos |
-| --- | --- | --- |
-| ![Hoje](docs/img/01-hoje.png) | ![Tarefas](docs/img/02-tarefas.png) | ![Projetos](docs/img/03-projetos.png) |
+  <sub><strong>English</strong> · <a href="README.pt-BR.md">Português</a></sub>
+</div>
 
-| Agenda | Hábitos | Jarvis |
-| --- | --- | --- |
-| ![Agenda](docs/img/04-agenda.png) | ![Hábitos](docs/img/05-habitos.png) | ![Jarvis](docs/img/06-jarvis.png) |
+> [!NOTE]
+> The app interface and the in-depth documentation are written in Portuguese (pt-BR).
+> This page describes the project in English; the code and the architecture are
+> language-neutral.
 
-| Projeto | Ajustes | Inteligência |
-| --- | --- | --- |
-| ![Projeto](docs/img/08-projeto.png) | ![Ajustes](docs/img/07-ajustes.png) | ![Inteligência](docs/img/09-ia.png) |
-
-> ## ⚠️ Beta
->
-> Este app está em **beta**. Funciona, tem **569 testes automatizados**, mas não
-> passou por uso prolongado em muitos aparelhos. Espere encontrar defeitos.
-> Leia [Limites e falhas conhecidas](docs/LIMITES.md) antes de confiar seus dados
-> a ele — e exporte um backup de vez em quando.
-
----
-
-## O que ele faz
-
-**Tarefas** com dia marcado, prazo separado, hora, duração, prioridade,
-etiquetas e subtarefas. A distinção entre "vou fazer quinta" e "tenho que
-entregar sexta" é do modelo, não um campo de texto. Cada item é tarefa,
-lembrete (não cobra prazo) ou ideia (algum dia).
-
-**Projetos** com categoria livre, prioridade própria (separada da ordem
-manual), prazo, marcos, anotações datadas e blocos configuráveis — dá para
-esconder o que não usa sem apagar nada. Cinco critérios de ordenação.
-
-**Hábitos** com dias da semana, meta numérica, sequência, mapa de calor e
-consistência dos últimos 30 dias.
-
-**Agenda** com mês, dia selecionável e eventos com duração e repetição.
-
-**Lembretes** que disparam notificação no horário, mesmo com o app fechado.
-
-**Busca** em tarefas, subtarefas, projetos, eventos e lembretes, ignorando
-acentos e maiúsculas.
-
-**Lixeira** com tudo que foi excluído: restaurar ou apagar de vez, com
-confirmação. A exclusão normal é suave e reversível.
-
-**Jarvis** — o assistente. Ele lê o seu dia, aponta o que está travando e
-**propõe** ações (criar tarefa, marcar hábito, anotar num projeto). Nada é
-executado sem a sua confirmação, e cada ação pode ser desfeita. A presença dele
-na tela é uma ilha flutuante no topo, que só aparece quando há algo a dizer.
-
-**Backup** em JSON, exportado para a pasta Documentos do aparelho no APK (com
-compartilhamento) e por download no navegador.
+> [!WARNING]
+> **Beta.** The app works and has 571 automated tests, but it has not seen
+> prolonged use on many devices. Expect defects. Read
+> [known limits](docs/LIMITES.md) (Portuguese) before entrusting it with your
+> data, and export a backup from time to time.
 
 ---
 
-## Começando em 10 minutos
+## Why this exists
 
-### 1. Rodar no navegador (o mais rápido)
+Many productivity apps ask for an account, keep your data on a server you cannot
+see, and add an AI assistant that bills you through a proxy. Urdume Público takes
+the opposite route:
+
+- **Local-first.** The database is IndexedDB inside the app. No account, no
+  login, no cloud, no author server.
+- **Your key, your bill.** There is no embedded API key and no proxy. Requests
+  go from your device straight to the provider you choose.
+- **Android and web.** The same React app ships as an APK through Capacitor and
+  runs as a PWA in the browser.
+- **Small and legible.** React 19, TypeScript, Vite and Dexie. No UI framework,
+  no analytics SDK, no telemetry.
+
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/img/02-hoje.png" width="200" alt="Today screen" /><br /><sub>Today</sub></td>
+    <td align="center"><img src="docs/img/03-tarefas.png" width="200" alt="Tasks screen" /><br /><sub>Tasks</sub></td>
+    <td align="center"><img src="docs/img/04-projetos.png" width="200" alt="Projects screen" /><br /><sub>Projects</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/img/05-agenda.png" width="200" alt="Calendar screen" /><br /><sub>Calendar</sub></td>
+    <td align="center"><img src="docs/img/06-habitos.png" width="200" alt="Habits screen" /><br /><sub>Habits</sub></td>
+    <td align="center"><img src="docs/img/07-ajustes.png" width="200" alt="Settings screen" /><br /><sub>Settings</sub></td>
+  </tr>
+</table>
+
+<sub>Screenshots from the web build at phone size, in Portuguese, with sample data.</sub>
+
+## What it does
+
+| Area | What you get |
+|---|---|
+| **Tasks** | Scheduled day, separate deadline, time, duration, priority, tags and subtasks. "I will do this on Thursday" and "I must deliver this on Friday" are different fields, not free text. Every item is a task, a reminder (no deadline pressure) or an idea (someday). |
+| **Projects** | Free-form category, its own priority (separate from manual order), deadline, milestones, dated notes and configurable blocks. Five sorting criteria. |
+| **Habits** | Weekday schedule, numeric goal, streak, heatmap and a 30-day consistency figure. |
+| **Calendar** | Month view, selectable day, and timed or repeating events. |
+| **Reminders** | Local notifications at the set time, even with the app closed. |
+| **Search** | Across tasks, subtasks, projects, events and reminders, ignoring accents and case. |
+| **Trash** | Everything deleted, in one place: restore or delete for good, with confirmation. Normal deletion is soft and reversible. |
+| **Jarvis** | Reads your day, points out what is stuck and **proposes** actions: create a task, check a habit, add a note to a project. Nothing runs without confirmation, and every action can be undone. |
+| **Data** | Local IndexedDB database, JSON backup export and import, no account. |
+
+### The assistant
+
+Jarvis is not a chat window bolted onto a to-do list. It reads the actual state
+of your day — tasks, deadlines, projects, habits — and turns it into a short
+briefing with suggested actions. Each proposal is a structured object that you
+accept or reject; the model never writes to the database directly.
+
+There are silent, manual and paused modes, plus a local monthly spending cap
+based on a price table in the code. The cap is a local guard, not a guarantee
+about your provider invoice.
+
+On screen, Jarvis is a floating island at the top that appears only when it has
+something to say. Conversations are kept per session, with a summary of older
+turns.
+
+<p align="center">
+  <img src="docs/img/09-jarvis-conversa.png" width="200" alt="Jarvis conversation screen with example tasks" />
+  <img src="docs/img/10-jarvis-ajustes.png" width="200" alt="Jarvis settings: provider, key hint and monthly cap" />
+  <br />
+  <sub>The real screens: conversation, and Settings → Jarvis and AI (provider,
+  key hint and monthly cap). Sample data — no live provider call in this
+  capture.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/img/08-projeto.png" width="260" alt="Project detail: progress, milestones, tasks and dated notes" />
+  <br />
+  <sub>Project detail: progress, milestones, tasks and dated notes.</sub>
+</p>
+
+## What it does not do
+
+Stated up front so nobody expects the wrong thing:
+
+| Not included | Why |
+|---|---|
+| Account, login, cloud | The database is local. There is no server. |
+| Sync between devices | Not part of this public variant; each device is independent. |
+| Drawing board | Removed for licensing: tldraw has its own terms. |
+| Graph memory, automatic thoughts, profile, insights | Exclusive to the main version. Here the assistant reads the day and proposes actions; it does not accumulate a graph of facts about you. |
+| AI without your key | No embedded key and no proxy; you pay your provider directly. |
+| iOS version | Android and the browser only. |
+| Home-screen widget | Not implemented. |
+| Automatic backup | Android backup is disabled on purpose, so only the export you make exists. |
+| Encryption at rest | None; the API key is stored in plaintext. Device lock is the real protection. |
+| Reliable AI in the browser | Providers often block cross-origin calls (CORS). Use the APK. |
+| A desktop layout | Designed for phones; on a desktop it shows a narrow column. |
+| A screen-reader audit | Labels and focus exist, but TalkBack has not been audited. |
+
+The full list, including notification delays and migration caveats, is in
+[docs/LIMITES.md](docs/LIMITES.md) (Portuguese).
+
+## Privacy, in plain words
+
+- **No telemetry.** No analytics, no crash reporting, no author server. The app
+  contacts no third-party service unless you ask the assistant.
+- **What leaves the device:** a summary of your day (task titles, deadlines,
+  project names) and the conversation text. Free-form notes and the rest of the
+  database stay on the device.
+- **What stays:** everything else, in IndexedDB. The backup is a JSON file you
+  export and store wherever you want. Importing a backup replaces the whole
+  database.
+- **The API key** lives only on the device, in a table excluded from exported
+  backups. It is not encrypted: anyone with the unlocked phone can read it.
+- **No account means no recovery.** A lost phone without a backup is lost data.
+
+## Quick start
+
+### 1. Install the APK (Android 7.0+)
+
+Download `urdume-publico-0.2.0.apk` from
+[Releases](https://github.com/ReiThomato/urdume-publico/releases/latest) and
+open it on the phone. Android will ask permission to install from an unknown
+source. The release page publishes the SHA-256 checksum of the file.
+
+The APK is also tracked in [`dist-apk/`](dist-apk/) in this repository.
+
+### 2. Run it in the browser
+
+Requirements: Node 20+.
 
 ```bash
 cd app
@@ -68,15 +162,13 @@ npm install
 npm run dev
 ```
 
-Abre em `http://localhost:5173`. Funciona offline depois do primeiro carregamento.
+It opens at `http://localhost:5173` and works offline after the first load. AI
+calls may be blocked by CORS in the browser; the app tells you when that
+happens. For the full assistant, use the APK.
 
-**Limite:** no navegador, a análise por IA pode ser barrada por CORS, porque o
-provedor não permite chamada de outra origem. O app avisa quando acontece. Para
-a IA funcionar de verdade, use o APK.
+### 3. Build the APK yourself
 
-### 2. Gerar o APK
-
-Pré-requisitos: Node 20+, JDK 17 e Android SDK.
+Requirements: Node 20+, JDK 17+ and the Android SDK.
 
 ```bash
 cd app
@@ -86,124 +178,142 @@ npx cap sync android
 cd android && ./gradlew assembleDebug
 ```
 
-O APK sai em `app/android/app/build/outputs/apk/debug/app-debug.apk`.
+The APK is written to `app/android/app/build/outputs/apk/debug/app-debug.apk`.
 
-### 3. Ligar a IA
+### 4. Connect the AI
 
-Precisa de uma chave de um provedor. O app **não** traz chave embutida.
+You need a key from a provider. The app does **not** ship one.
 
-1. **Ajustes → Jarvis e IA**
-2. Escolha o provedor (OpenAI, Gemini, Claude, DeepSeek ou OpenRouter)
-3. Toque em **Adicionar** e cole a chave
-4. Volte ao Jarvis
+1. Open **Settings → Jarvis and AI**.
+2. Pick a provider.
+3. Tap **Add** and paste the key.
+4. Go back to Jarvis.
 
-| Provedor | Onde pegar a chave | Modelo padrão |
-| --- | --- | --- |
-| OpenAI | platform.openai.com/api-keys | `gpt-4o-mini` |
-| Google Gemini | aistudio.google.com/apikey | `gemini-2.0-flash` |
-| Anthropic | console.anthropic.com/settings/keys | `claude-3-5-haiku-latest` |
-| DeepSeek | platform.deepseek.com/api_keys | `deepseek-chat` |
-| OpenRouter | openrouter.ai/keys | `anthropic/claude-3.5-haiku` |
+| Provider | Where to get a key | Default model |
+|---|---|---|
+| OpenAI | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) | `gpt-4o-mini` |
+| Google Gemini | [aistudio.google.com/apikey](https://aistudio.google.com/apikey) | `gemini-2.0-flash` |
+| Anthropic | [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) | `claude-3-5-haiku-latest` |
+| DeepSeek | [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) | `deepseek-chat` |
+| OpenRouter | [openrouter.ai/keys](https://openrouter.ai/keys) | `anthropic/claude-3.5-haiku` |
 
-A chave fica **só neste aparelho**, numa tabela fora do backup exportado. Quem
-tiver o celular desbloqueado consegue lê-la; por isso o bloqueio de tela importa.
+## How the assistant talks to providers
 
----
+One module (`app/src/lib/jarvis/provedores.ts`) holds the three dialects. They
+are **not** compatible with each other, and that is the part that usually
+breaks:
 
-## Como a IA é chamada
+| | OpenAI and compatible | Gemini | Anthropic |
+|---|---|---|---|
+| Endpoint | `/v1/chat/completions` | `/<model>:generateContent` | `/v1/messages` |
+| Authentication | `Authorization: Bearer` | `x-goog-api-key` | `x-api-key` + version |
+| System instruction | `messages[0]` | `systemInstruction` | `system` |
+| Response | `choices[0].message.content` | `candidates[0].content.parts[]` | `content[]` |
+| Forced JSON | `response_format` | `responseMimeType` | prompt only |
 
-Um único módulo (`src/lib/jarvis/provedores.ts`) concentra os dialetos.
-Eles **não** são compatíveis entre si, e essa é a parte que costuma quebrar:
+Adding a provider that speaks the OpenAI format is one entry in `PROVEDORES`
+with `dialeto: 'openai'`. The test `provedores.test.ts` checks that every
+declared provider can build a request body, build headers and read a response.
 
-| | OpenAI e compatíveis | Gemini | Anthropic |
-| --- | --- | --- | --- |
-| Endpoint | `/v1/chat/completions` | `/<modelo>:generateContent` | `/v1/messages` |
-| Autenticação | `Authorization: Bearer` | `x-goog-api-key` | `x-api-key` + versão |
-| Instrução de sistema | `messages[0]` | `systemInstruction` | `system` |
-| Resposta | `choices[0].message.content` | `candidates[0].content.parts[]` | `content[]` |
-| JSON forçado | `response_format` | `responseMimeType` | só via prompt |
+There is no proxy, gateway or author address in the path: the request leaves
+your device and goes straight to the provider, with your key.
 
-**Adicionar um provedor** que fale o formato da OpenAI é uma entrada em
-`PROVEDORES`, com `dialeto: 'openai'`. O teste `provedores.test.ts` confere que
-todo provedor declarado sabe montar corpo, montar cabeçalho e ler resposta.
+### What the assistant may and may not do
 
-Não há proxy, gateway nem endereço do autor no caminho: a requisição sai do seu
-aparelho direto para o provedor, com a sua chave.
+It may propose: create and edit a task, project, milestone, event, reminder or
+habit; complete a task, milestone, event, subtask or reminder; check a habit;
+add a note to a project; organise a project (category and priority); warn you
+about something. It also runs **batches** ("complete the overdue tasks in
+project X"), and always shows how many items will be affected before applying.
 
----
+It never runs without confirmation, and never deletes, restores a backup,
+changes settings or changes its own autonomy level.
 
-## O que a IA pode e não pode
-
-**Pode propor:** criar e editar tarefa, projeto, marco, evento, lembrete e
-hábito; concluir tarefa, marco, evento, subtarefa e lembrete; marcar hábito;
-anotar em projeto; organizar projeto (categoria e prioridade); avisar. Também
-opera **lotes** ("conclua as tarefas atrasadas do projeto X"), sempre mostrando
-quantas serão afetadas antes de aplicar.
-
-**Nunca executa sem confirmação** e nunca apaga, restaura backup, muda
-configuração ou o nível de autonomia. Existe modo silencioso, manual e pausado.
-
-**Privacidade:** o que vai para o provedor é um resumo do seu dia — títulos de
-tarefas e nomes de projetos —, não o banco inteiro. O texto da conversa e as
-anotações livres ficam no aparelho.
-
----
-
-## Estrutura
+## How it is built
 
 ```
-app/
-  src/
-    app/        roteador, tema, blocos do Início, menu de criação
-    db/         Dexie (IndexedDB): schema, repositório, migrações
-    lib/
-      jarvis/   o assistente: sinais, relevância, executor, autonomia, provedores
-      date.ts   datas locais (o app conta o dia pelo fuso do aparelho)
-    screens/    uma tela por rota
-    ui/         componentes compartilhados
-    styles/     CSS por área, sem framework
-  android/      projeto Capacitor
-docs/           documentação além deste README
+WebView (APK) / browser
+  screens/  ──►  db/repo.ts  ──►  Dexie (IndexedDB)
+     │              ▲
+     ▼              │
+  ui/  ◄────────────┘  (reactive useLiveQuery)
+
+  lib/jarvis/ ──► AI provider (HTTPS, your key)
+     │
+     └──► local notifications (Android)
 ```
 
-O banco é local: IndexedDB dentro do WebView, com nome próprio
-(`urdume-publico`). Não há conta, login nem nuvem. **Faça backup** em
-Ajustes → Dados → Exportar.
+No server. No account. The only network egress is the AI provider call.
 
----
+```
+app/src/
+  app/        router, theme, Today blocks, create menu
+  db/         Dexie schema, repository, migrations
+  lib/
+    jarvis/   assistant: signals, relevance, executor, autonomy, providers
+    date.ts   local dates (the app counts the day in the device timezone)
+  screens/    one screen per route
+  ui/         shared components
+  styles/     plain CSS per area, no framework
+app/android/  Capacitor project
+docs/         documentation beyond this README
+```
 
-## Documentação
+The code comments and in-depth documentation are in Portuguese, following the
+conventions described in [docs/CONTRIBUINDO.md](docs/CONTRIBUINDO.md).
 
-- [Arquitetura](docs/ARQUITETURA.md) — como as peças conversam
-- [Limites e falhas conhecidas](docs/LIMITES.md) — leia antes de confiar
-- [Contribuindo](docs/CONTRIBUINDO.md) — padrões de código e de teste
-- [Licença](LICENSE) — PolyForm Noncommercial 1.0.0
+## Tests
 
----
+```bash
+cd app
+npm ci
+npm test        # 571 tests
+npx tsc -b      # type check
+```
 
-## Licença, em uma frase
+54 test files cover the database, migrations, the assistant signals, the action
+executor and its undo, batches, the three provider dialects, APK hygiene and the
+isolation of this variant. Automated tests cover logic, not the behaviour of
+Android on every manufacturer — see the beta warning above.
 
-Você pode usar, estudar, modificar e compartilhar — **para uso próprio, estudo,
-pesquisa ou projetos sem fins lucrativos**. Não pode vender, cobrar por ele nem
-usar para gerar receita. O texto que vale é o de [LICENSE](LICENSE).
+## Documentation
 
-Se você quer usar comercialmente, é preciso falar com o autor.
+The complete manual is in Portuguese:
 
----
+| Document | What it covers |
+|---|---|
+| [Arquitetura](docs/ARQUITETURA.md) | layers, data model, assistant pipeline and design decisions |
+| [Limites e falhas conhecidas](docs/LIMITES.md) | what does not exist, what is not guaranteed, what was actually tested |
+| [Contribuindo](docs/CONTRIBUINDO.md) | code and test conventions, and what does not get merged |
+| [Licença](LICENSE) | the full license text |
 
-## De onde isto veio
+## License
 
-Este é um derivado de um app pessoal, publicado como variante de código aberto.
-A versão original tem três coisas que **não** estão aqui, por decisão de
-licenciamento e de privacidade:
+**Source-available, not OSI open source.** Urdume Público is distributed under
+the [PolyForm Noncommercial 1.0.0](LICENSE).
 
-- **o quadro de desenho** (tldraw), que tem licença própria e não pode ser
-  redistribuído assim;
-- **a sincronização com um servidor pessoal**, que dependia da infraestrutura do
-  autor;
-- **o motor de inteligência mais recente** (memória em grafo, pensamentos
-  automáticos, perfil e insights), que continua exclusivo da versão principal.
+You may use, study, modify and share it for personal use, study, research or
+nonprofit projects. You may not sell it, charge for it or use it to generate
+revenue. Commercial use requires an agreement with the author. The binding text
+is [LICENSE](LICENSE).
 
-O que ficou é o núcleo: rotina, projetos e o assistente. Ele foi adaptado para
-receber a chave de qualquer provedor, com identidade própria de aplicativo e de
-banco, para não conflitar com o original no mesmo aparelho.
+## Origins and credits
+
+This is a derivative of a personal app, published as a source-available variant.
+Three things from the original are **not** here, by licensing and privacy
+decisions:
+
+- **the drawing board** (tldraw), which has its own license and cannot be
+  redistributed this way;
+- **sync with a personal server**, which depended on the author's
+  infrastructure;
+- **the newer intelligence engine** (graph memory, automatic thoughts, profile
+  and insights), which stays exclusive to the main version.
+
+What remains is the core: routine, projects and the assistant. It was adapted to
+accept a key from any provider, with its own app and database identity so it
+does not conflict with the original on the same device.
+
+Built with React, Vite, Capacitor, Dexie, Lucide and Material Color Utilities.
+Android is a trademark of Google LLC. AI provider names are trademarks of their
+respective owners. No affiliation with any of them.
