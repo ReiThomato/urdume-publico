@@ -113,8 +113,7 @@ Stated up front so nobody expects the wrong thing:
 |---|---|
 | Account, login, cloud | The database is local. There is no server. |
 | Sync between devices | Not part of this public variant; each device is independent. |
-| Drawing board | Removed for licensing: tldraw has its own terms. |
-| Graph memory, automatic thoughts, profile, insights | Exclusive to the main version. Here the assistant reads the day and proposes actions; it does not accumulate a graph of facts about you. |
+| Drawing board | Not part of this variant: the editor has its own license terms. |
 | AI without your key | No embedded key and no proxy; you pay your provider directly. |
 | iOS version | Android and the browser only. |
 | Home-screen widget | Not implemented. |
@@ -300,15 +299,8 @@ is [LICENSE](LICENSE).
 ## Origins and credits
 
 This is a derivative of a personal app, published as a source-available variant.
-Three things from the original are **not** here, by licensing and privacy
-decisions:
-
-- **the drawing board** (tldraw), which has its own license and cannot be
-  redistributed this way;
-- **sync with a personal server**, which depended on the author's
-  infrastructure;
-- **the newer intelligence engine** (graph memory, automatic thoughts, profile
-  and insights), which stays exclusive to the main version.
+The drawing board and server sync are **not** here: the first has its own
+license terms and the second depended on the author's infrastructure.
 
 What remains is the core: routine, projects and the assistant. It was adapted to
 accept a key from any provider, with its own app and database identity so it

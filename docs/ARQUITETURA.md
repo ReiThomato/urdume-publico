@@ -89,16 +89,17 @@ são próprios desta variante. Reutilizar os do app original faz o Android trata
 esta versão como atualização daquela — e as duas passam a disputar o mesmo
 banco. Há teste (`isolamento.test.ts`) que falha se alguém reverter.
 
-**Sem tldraw.** Não é só remover a dependência: as rotas `paginas`/`pagina`, o
-bloco do Início, a tabela `pages`, o tema do quadro e as ações `criar_pagina` e
-`escrever_no_quadro` da IA saíram junto. Um teste varre o código atrás de import
-residual e outro recusa a volta dos módulos.
+**Sem o editor de desenho.** Não é só remover a dependência: as rotas
+`paginas`/`pagina`, o bloco do Início, a tabela `pages`, o tema próprio do
+editor e as ações `criar_pagina` e `escrever_no_quadro` da IA saíram junto. Um
+teste varre o código atrás de import residual e outro recusa a volta dos
+módulos.
 
-**Sem sincronização e sem motor de inteligência exclusivo.** Os módulos de
-`lib/sync/`, `memorias`, `vinculos`, `pensamentos`, `perfil`, `insights`,
-`recusas`, `padroes` e `assuntos` não existem aqui. O `isolamento.test.ts`
-verifica a ausência de cada um: se voltarem por engano, o teste falha — e a
-variante deixaria de ser "enxuta" prometendo um comportamento que não tem.
+**Sem sincronização e sem o motor de aprendizagem exclusivo.** Não existem aqui
+`lib/sync/` nem os módulos que acumulam conhecimento sobre o usuário entre
+sessões. O `isolamento.test.ts` verifica a ausência de cada um: se voltarem por
+engano, o teste falha — e a variante passaria a prometer um comportamento que
+não tem.
 
 **Datas locais, não UTC.** O app conta o dia pelo fuso do aparelho
 (`chaveDoDia`). Usar `toISOString()` faria uma tarefa marcada para hoje, às 22h
@@ -120,7 +121,7 @@ funções:
 - `lib/jarvis/provedores.test.ts` — os três dialetos, sem rede
 - `lib/jarvis/ia.test.ts` — formato do resumo, JSON da resposta, recusas
 - `lib/jarvis/executor.ts` / `acoes.test.ts` — prévia, risco e desfazer
-- `lib/isolamento.test.ts` — identidade própria, sem servidor, sem tldraw,
+- `lib/isolamento.test.ts` — identidade própria, sem servidor, sem o editor,
   sem o motor exclusivo
 - `lib/higiene.test.ts` — APK: versão, backup desligado, service worker
 - `db/onda2-paridade.test.ts` — cada tela usa o mesmo componente, sem cópia

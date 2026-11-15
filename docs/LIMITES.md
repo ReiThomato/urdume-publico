@@ -15,8 +15,8 @@ automatizados cobrem lógica, não o comportamento do Android em cada fabricante
 | --- | --- |
 | Conta, login, nuvem | O banco é local (IndexedDB no WebView). Não há servidor. |
 | Sincronizar entre aparelhos | A variante pública não traz sincronização. Cada aparelho é independente. |
-| Quadro de desenho | Removido por licença: o tldraw tem termos próprios. |
-| Memória em grafo, perfil e insights | São exclusivos da versão principal. Aqui o assistente lê o dia e propõe ações; não acumula um grafo de fatos sobre você. |
+| Quadro de desenho | Fora desta variante: o editor tem termos de licença próprios. |
+| Aprendizado de longo prazo sobre você | Exclusivo da versão principal. Aqui o assistente lê o dia e propõe ações; não acumula um perfil. |
 | IA sem a sua chave | Não há chave embutida nem proxy. |
 | Widget de tela inicial | Não implementado. |
 | Versão iOS | Só Android e navegador. |

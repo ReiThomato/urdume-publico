@@ -47,26 +47,13 @@ export function AjustesSobre() {
 					<div className="sobre-links">
 						<a
 							className="sobre-link"
-							href="https://github.com/reithomoto"
+							href="https://github.com/ReiThomato/urdume-publico"
 							target="_blank"
 							rel="noreferrer noopener"
 						>
 							<span className="sobre-link__texto">
 								<span className="sobre-link__nome">GitHub</span>
-								<span className="sobre-link__endereco">github.com/reithomoto</span>
-							</span>
-							<IconeAvancar size={20} />
-						</a>
-
-						<a
-							className="sobre-link"
-							href="https://instagram.com/reithomato"
-							target="_blank"
-							rel="noreferrer noopener"
-						>
-							<span className="sobre-link__texto">
-								<span className="sobre-link__nome">Instagram</span>
-								<span className="sobre-link__endereco">instagram.com/reithomato</span>
+								<span className="sobre-link__endereco">github.com/ReiThomato/urdume-publico</span>
 							</span>
 							<IconeAvancar size={20} />
 						</a>

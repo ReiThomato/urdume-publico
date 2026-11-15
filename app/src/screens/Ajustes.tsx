@@ -146,9 +146,13 @@ export function Ajustes() {
 				</section>
 
 				<p className="nota" style={{ padding: 'var(--s-4)', textAlign: 'center' }}>
-					{projetos ? `${projetos.length} projeto(s)` : '…'}
-					{categorias.length > 0 ? ` · ${categorias.length} categoria(s)` : ''} · dados só
-					neste aparelho
+					{projetos
+						? `${projetos.length} ${projetos.length === 1 ? 'projeto' : 'projetos'}`
+						: '…'}
+					{categorias.length > 0
+						? ` · ${categorias.length} ${categorias.length === 1 ? 'categoria' : 'categorias'}`
+						: ''}{' '}
+					· dados só neste aparelho
 				</p>
 			</div>
 		</div>

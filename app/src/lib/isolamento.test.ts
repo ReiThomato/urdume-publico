@@ -53,17 +53,52 @@ describe('identidade própria', () => {
 })
 
 describe('o que a variante não tem', () => {
-	it('nenhum vestígio do tldraw', async () => {
-		const pkg = await ler('app/package.json')
-		expect(pkg).not.toContain('tldraw')
-
-		// Pastas e telas que só existiam pelo editor.
+	it('nenhum vestígio do editor de desenho', async () => {
+		/*
+		 * Pastas e telas que só existiam pelo editor. O nome do pacote não
+		 * aparece aqui de propósito: este arquivo é publicado, e uma lista de
+		 * PROIBIDOS por nome diz mais sobre a versão principal do que sobre esta.
+		 * O que importa é que a superfície sumiu.
+		 */
 		expect(await existe('app/src/quadro')).toBe(false)
 		expect(await existe('app/src/screens/Quadro.tsx')).toBe(false)
 		expect(await existe('app/src/screens/Paginas.tsx')).toBe(false)
+		// Assets de editor não ficam em `public/`: o que o app serve vem do
+		// bundle, e só fonte e ícone da marca moram ali.
+		expect(await existe('app/public/editor-assets')).toBe(false)
 	})
 
-	it('nenhum código importa tldraw', async () => {
+	it('as dependências são só as declaradas', async () => {
+		/*
+		 * Lista branca, não negra.
+		 *
+		 * O `package.json` é o contrato do que o app carrega. Uma dependência
+		 * nova entra aqui de propósito — e um editor, um SDK de analytics ou um
+		 * cliente de servidor não passam sem alguém decidir.
+		 */
+		const pkg = JSON.parse(await ler('app/package.json')) as {
+			dependencies: Record<string, string>
+		}
+		const permitidas = new Set([
+			'@capacitor/app',
+			'@capacitor/background-runner',
+			'@capacitor/core',
+			'@capacitor/filesystem',
+			'@capacitor/local-notifications',
+			'@capacitor/preferences',
+			'@capacitor/share',
+			'@material/material-color-utilities',
+			'dexie',
+			'dexie-react-hooks',
+			'lucide-react',
+			'react',
+			'react-dom',
+		])
+
+		expect(Object.keys(pkg.dependencies).sort()).toEqual([...permitidas].sort())
+	})
+
+	it('nenhum código importa um editor de desenho', async () => {
 		const fs = await import('node:fs')
 		const pasta = new URL('../', import.meta.url)
 		const achados: string[] = []
@@ -71,16 +106,20 @@ describe('o que a variante não tem', () => {
 		const varrer = (dir: URL): void => {
 			for (const entrada of fs.readdirSync(dir, { withFileTypes: true })) {
 				if (entrada.name === 'node_modules' || entrada.name.startsWith('.')) continue
-				// O próprio teste cita o nome do pacote; não é uso.
 				if (entrada.name === 'isolamento.test.ts') continue
 				const alvo = new URL(`${entrada.name}${entrada.isDirectory() ? '/' : ''}`, dir)
 				if (entrada.isDirectory()) {
 					varrer(alvo)
 					continue
 				}
-				if (!/\.(ts|tsx)$/.test(entrada.name)) continue
+				if (!/\.(ts|tsx|css)$/.test(entrada.name)) continue
 				const texto = fs.readFileSync(alvo, 'utf-8')
-				if (/from 'tldraw'|from "tldraw"|tldraw\.css/.test(texto)) achados.push(alvo.pathname)
+				// Qualquer import que não esteja no `package.json` quebra o build
+				// de qualquer forma; o alvo aqui é a dependência que ESTÁ no
+				// lockfile por engano e passa despercebida.
+				if (/from ['"][^'"]*(canvas-editor|whiteboard|board-kit)/.test(texto)) {
+					achados.push(alvo.pathname)
+				}
 			}
 		}
 

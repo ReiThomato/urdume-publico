@@ -200,15 +200,9 @@ Se você quer usar comercialmente, é preciso falar com o autor.
 ## De onde isto veio
 
 Este é um derivado de um app pessoal, publicado como variante de código-fonte
-disponível. A versão original tem três coisas que **não** estão aqui, por
-decisão de licenciamento e de privacidade:
-
-- **o quadro de desenho** (tldraw), que tem licença própria e não pode ser
-  redistribuído assim;
-- **a sincronização com um servidor pessoal**, que dependia da infraestrutura do
-  autor;
-- **o motor de inteligência mais recente** (memória em grafo, pensamentos
-  automáticos, perfil e insights), que continua exclusivo da versão principal.
+disponível. O quadro de desenho e a sincronização com servidor **não** estão
+aqui: o primeiro tem licença própria e o segundo dependia da infraestrutura do
+autor.
 
 O que ficou é o núcleo: rotina, projetos e o assistente. Ele foi adaptado para
 receber a chave de qualquer provedor, com identidade própria de aplicativo e de

@@ -56,12 +56,12 @@ intermitente.
 
 ## O que não entra
 
-- **tldraw ou qualquer código com licença incompatível** com PolyForm
-  Noncommercial. Há teste que falha se aparecer.
+- **Código com licença incompatível** com PolyForm Noncommercial, inclusive o
+  editor de desenho. Há teste que falha se aparecer.
 - **Servidor, sincronização ou chave de API embutida.** A variante é local.
-- **Os módulos do motor de inteligência exclusivo** (`memorias`, `vinculos`,
-  `pensamentos`, `perfil`, `insights`, `recusas`, `padroes`, `assuntos`). Eles
-  ficam na versão principal; o `isolamento.test.ts` recusa a volta.
+- **Os módulos do motor de aprendizagem exclusivo** — os que acumulam
+  conhecimento sobre o usuário entre sessões. Eles ficam na versão principal; o
+  `isolamento.test.ts` recusa a volta.
 - **Endereço privado, dado pessoal do autor, telemetria.** Também há teste.
 - **Mudar `appId`/`applicationId`/nome do banco** para o de outro app. Ver
   `isolamento.test.ts`.
