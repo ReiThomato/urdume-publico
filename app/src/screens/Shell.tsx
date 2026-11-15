@@ -5,6 +5,14 @@ import { iniciarAvisos } from '@/lib/avisos'
 import { useJarvisVivo } from '@/lib/jarvis/ciclo'
 import { aoFalharEscrita } from '@/lib/falhas'
 import { Ajustes } from '@/screens/Ajustes'
+import { AjustesAparencia } from '@/screens/ajustes/Aparencia'
+import { AjustesAcessibilidade } from '@/screens/ajustes/Acessibilidade'
+import { AjustesIA } from '@/screens/ajustes/IA'
+import { AjustesDados } from '@/screens/ajustes/Dados'
+import { Lixeira } from '@/screens/Lixeira'
+import { AjustesAparelho } from '@/screens/ajustes/Aparelho'
+import { AjustesSobre } from '@/screens/ajustes/Sobre'
+import { AjustesNavegacao } from '@/screens/ajustes/Navegacao'
 import { Calendario } from '@/screens/Calendario'
 import { HabitoDetalhe, Habitos } from '@/screens/Habitos'
 import { Inicio } from '@/screens/Inicio'
@@ -16,8 +24,10 @@ import { Tarefas } from '@/screens/Tarefas'
 import { AppShell } from '@/ui/AppShell'
 import { IconeAdicionar, IconeConversa } from '@/ui/icones'
 import { CriarFolha, type TipoCriacao } from '@/ui/CriarFolha'
+import { CriarProjeto } from '@/ui/CriarProjeto'
 import { AvisoNoTopo } from '@/ui/AvisoNoTopo'
 import type { AvisoDoTopo } from '@/ui/AvisoNoTopo'
+import { BolhaDoJarvis } from '@/ui/BolhaDoJarvis'
 
 interface CriacaoPedida {
 	tipo?: TipoCriacao
@@ -27,6 +37,7 @@ interface CriacaoPedida {
 function Telas() {
 	const { route, navigate } = useRouter()
 	const [criando, setCriando] = useState<CriacaoPedida | null>(null)
+	const [criandoProjeto, setCriandoProjeto] = useState(false)
 	const [aviso, setAviso] = useState<AvisoDoTopo | null>(null)
 	// Falha de escrita (banco recusou, cota cheia): faixa vermelha no rodapé.
 	// Antes a folha fechava como se tivesse salvado e o usuário não sabia.
@@ -93,8 +104,16 @@ function Telas() {
 	}, [])
 
 	const abrirCriacao = (opcoes?: CriacaoPedida): void => {
+		// Projeto é a única criação com formulário próprio (`CriarProjeto`):
+		// abrir a folha genérica com `tipo: 'projeto'` cairia num subformulário
+		// de um campo só, que é justamente a divergência D5.
+		if (opcoes?.tipo === 'projeto') {
+			setCriandoProjeto(true)
+			return
+		}
 		setCriando(opcoes ?? {})
 	}
+
 
 	const conteudo = (() => {
 		switch (route.name) {
@@ -123,6 +142,22 @@ function Telas() {
 				)
 			case 'ajustes':
 				return <Ajustes />
+			case 'ajustes-aparencia':
+				return <AjustesAparencia />
+			case 'ajustes-acessibilidade':
+				return <AjustesAcessibilidade />
+			case 'ajustes-ia':
+				return <AjustesIA />
+			case 'ajustes-dados':
+				return <AjustesDados />
+			case 'lixeira':
+				return <Lixeira />
+			case 'ajustes-aparelho':
+				return <AjustesAparelho />
+			case 'ajustes-sobre':
+				return <AjustesSobre />
+			case 'ajustes-navegacao':
+				return <AjustesNavegacao />
 			default:
 				return (
 					<div className="tela">
@@ -144,10 +179,33 @@ function Telas() {
 			    duas telas, e o botão ficava por cima dos controles (no Jarvis,
 			    cobria o "Útil" dos cartões). Nas outras telas ele fica no canto,
 			    e o conteúdo reserva a faixa de baixo. */}
-			{route.name === 'ajustes' || route.name === 'jarvis' || route.name === 'conversa' ? null : (
+			{route.name === 'ajustes' ||
+			route.name === 'ajustes-aparencia' ||
+			route.name === 'ajustes-acessibilidade' ||
+			route.name === 'ajustes-ia' ||
+			route.name === 'ajustes-dados' ||
+			route.name === 'lixeira' ||
+			route.name === 'ajustes-aparelho' ||
+			route.name === 'ajustes-sobre' ||
+			route.name === 'ajustes-navegacao' ||
+			route.name === 'jarvis' ||
+			route.name === 'conversa' ? null : (
 				<div className={fabVisivel ? 'fab-area' : 'fab-area fab-area--oculto'}>
-					{/* Conversar fica ACIMA do Criar, menor e mais discreto: o Criar é a
-					    ação principal do app; o chat é presença, não comando. */}
+					{/*
+					 * A pilha de flutuantes, como era: a conversa em cima (menor,
+					 * discreta) e o criar embaixo (a ação principal).
+					 *
+					 * A conversa saiu da barra inferior: ela não é um lugar do
+					 * dia, é um atalho permanente. Fora da pilha ela virou o
+					 * sétimo item da barra, contra o padrão de cinco.
+					 *
+					 * O problema antigo era o botão cobrir o canto dos cartões
+					 * de vazio. A correção não é esconder o botão: é o botão
+					 * SUBIR quando há cartão no caminho. Quem decide isso é o
+					 * CSS (`:has()`), não o JavaScript — ver `.fab-area` em
+					 * `app.css`: quando o último bloco da tela tem uma ação
+					 * grande (`.vazio__acao`), a pilha ganha folga extra.
+					 */}
 					<button
 						type="button"
 						className="fab fab--conversa"
@@ -181,12 +239,21 @@ function Telas() {
 
 			<AvisoNoTopo aviso={aviso} onFechar={() => setAviso(null)} />
 
+			{/* A ilha do Jarvis. Fica depois do aviso de lembrete e antes das
+			    folhas: as duas ocupam o topo, mas a ilha é a camada de cima —
+			    um lembrete do sistema não pode cobrir o que a IA está dizendo. */}
+			<BolhaDoJarvis />
+
 			<CriarFolha
 				aberta={criando !== null}
 				onFechar={() => setCriando(null)}
 				tipo={criando?.tipo}
 				dia={criando?.dia}
+				onCriarProjeto={() => setCriandoProjeto(true)}
 			/>
+
+			{/* Projeto criado pelo FAB usa o MESMO formulário completo da central. */}
+			<CriarProjeto aberto={criandoProjeto} onFechar={() => setCriandoProjeto(false)} />
 		</>
 	)
 }

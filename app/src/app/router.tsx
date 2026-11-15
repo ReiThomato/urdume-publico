@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import type { MouseEvent, ReactNode } from 'react'
+import type { CSSProperties, MouseEvent, ReactNode } from 'react'
 
 export type Route =
 	| { name: 'inicio' }
@@ -12,6 +12,14 @@ export type Route =
 	| { name: 'jarvis' }
 	| { name: 'conversa'; semente?: string }
 	| { name: 'ajustes' }
+	| { name: 'ajustes-aparencia' }
+	| { name: 'ajustes-acessibilidade' }
+	| { name: 'ajustes-ia' }
+	| { name: 'ajustes-dados' }
+	| { name: 'ajustes-aparelho' }
+	| { name: 'ajustes-sobre' }
+	| { name: 'ajustes-navegacao' }
+	| { name: 'lixeira' }
 	| { name: 'nao-encontrada'; path: string }
 
 function decode(value: string): string {
@@ -23,8 +31,9 @@ function decode(value: string): string {
 }
 
 /**
- * Leitor de rota. Aceita caminhos limpos (`/paginas`) e também o fallback em hash
- * (`/#/paginas`), útil quando o app é aberto de uma pasta estática sem reescrita.
+ * Leitor de rota. Aceita caminhos limpos (`/tarefas`) e também o fallback em
+ * hash (`/#/tarefas`), útil quando o app é aberto de uma pasta estática sem
+ * reescrita.
  */
 export function parseRoute(rawPath: string, rawSearch = ''): Route {
 	const hashIndex = rawPath.indexOf('#')
@@ -71,8 +80,24 @@ export function parseRoute(rawPath: string, rawSearch = ''): Route {
 		case 'conversa':
 			return { name: 'conversa', semente: query.get('pedido') ?? undefined }
 		case 'ajustes':
-		case 'configuracao':
+		case 'configuracao': {
+			if (!second) return { name: 'ajustes' }
+			const filhas = [
+				'aparencia',
+				'acessibilidade',
+				'ia',
+				'dados',
+				'aparelho',
+				'sobre',
+				'navegacao',
+			] as const
+			if ((filhas as readonly string[]).includes(second)) {
+				return { name: `ajustes-${second}` as Route['name'] } as Route
+			}
 			return { name: 'ajustes' }
+		}
+		case 'lixeira':
+			return { name: 'lixeira' }
 		default:
 			return { name: 'nao-encontrada', path: pathname }
 	}
@@ -102,6 +127,22 @@ export function routeToPath(route: Route): string {
 				: '/conversa'
 		case 'ajustes':
 			return '/ajustes'
+		case 'ajustes-aparencia':
+			return '/ajustes/aparencia'
+		case 'ajustes-acessibilidade':
+			return '/ajustes/acessibilidade'
+		case 'ajustes-ia':
+			return '/ajustes/ia'
+		case 'ajustes-dados':
+			return '/ajustes/dados'
+		case 'ajustes-aparelho':
+			return '/ajustes/aparelho'
+		case 'ajustes-sobre':
+			return '/ajustes/sobre'
+		case 'ajustes-navegacao':
+			return '/ajustes/navegacao'
+		case 'lixeira':
+			return '/lixeira'
 		default:
 			return '/'
 	}
@@ -163,6 +204,8 @@ export interface LinkProps {
 	route: Route
 	children: ReactNode
 	className?: string
+	/** Estilo inline; usado pelo cartão de projeto, que publica `--cor-cat`. */
+	style?: CSSProperties
 	ariaLabel?: string
 	title?: string
 	ariaCurrent?: 'page' | 'step' | 'location' | 'date' | 'time' | 'true'
@@ -170,7 +213,7 @@ export interface LinkProps {
 }
 
 /** Link acessível: mantém o href real e delega a navegação ao roteador. */
-export function Link({ route, children, className, ariaLabel, title, ariaCurrent, onClick }: LinkProps) {
+export function Link({ route, children, className, style, ariaLabel, title, ariaCurrent, onClick }: LinkProps) {
 	const { navigate } = useRouter()
 	const href = routeToPath(route)
 
@@ -187,6 +230,7 @@ export function Link({ route, children, className, ariaLabel, title, ariaCurrent
 		<a
 			href={href}
 			className={className}
+			style={style}
 			aria-label={ariaLabel}
 			aria-current={ariaCurrent}
 			title={title}

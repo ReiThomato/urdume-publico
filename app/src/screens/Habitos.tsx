@@ -17,7 +17,8 @@ import { Link } from '@/app/router'
 import { Topo } from '@/ui/AppShell'
 import { Folha } from '@/ui/Folha'
 import { estiloCor } from '@/ui/cores'
-import { PALETA, corDoIndice } from '@/ui/paleta'
+import { corDe, tintaSobre } from '@/ui/paleta'
+import { EscolherCor } from '@/ui/EscolherCor'
 import {
 	IconeAdicionar,
 	IconeApagar,
@@ -26,6 +27,7 @@ import {
 	IconeEditar,
 	IconeFogo,
 	IconeHorario,
+	IconeMaisVertical,
 	IconeRepetir,
 } from '@/ui/icones'
 
@@ -44,6 +46,17 @@ export function Habitos() {
 	const [criando, setCriando] = useState(false)
 	const [editando, setEditando] = useState<Habit | null>(null)
 	const [registrando, setRegistrando] = useState<HabitoCalculado | null>(null)
+	/** Hábito com o menu de ações aberto (editar/excluir sem entrar no detalhe). */
+	const [acoes, setAcoes] = useState<HabitoCalculado | null>(null)
+	/**
+	 * Hábito aguardando confirmação de exclusão.
+	 *
+	 * Era o único caminho de exclusão SEM confirmação: o menu ⋮ apagava no
+	 * primeiro toque, com "Não dá para desfazer" como única proteção, enquanto o
+	 * mesmo botão dentro do formulário pedia confirmação. Duas portas, dois
+	 * níveis de proteção para a mesma ação destrutiva.
+	 */
+	const [excluindo, setExcluindo] = useState<Habit | null>(null)
 	const [filtro, setFiltro] = useState<'todos' | 'pendentes' | 'feitos'>('todos')
 
 	const hoje = useMemo(() => diaDeHoje(), [])
@@ -129,6 +142,7 @@ export function Habitos() {
 									hoje={chaveHoje}
 									onRegistrar={() => setRegistrando(habito)}
 									onEditar={() => setEditando(habito)}
+									onAcoes={() => setAcoes(habito)}
 								/>
 							))}
 						</div>
@@ -176,7 +190,7 @@ export function Habitos() {
 													width: `${habito.consistencia}%`,
 													height: '100%',
 													borderRadius: 999,
-													background: corDoIndice(habito.cor ?? 0).hex,
+													background: corDe(habito.cor).hex,
 													transition: 'width var(--dur-slow) var(--ease-emphasized)',
 												}}
 											/>
@@ -197,8 +211,101 @@ export function Habitos() {
 				aberto={editando !== null}
 				habito={editando}
 				onFechar={() => setEditando(null)}
+				onExcluir={setExcluindo}
 			/>
 			<RegistroHabito habito={registrando} onFechar={() => setRegistrando(null)} hoje={chaveHoje} />
+
+			{/* Ações do hábito: o mesmo menu do cartão de tarefa. Sem isto, editar
+			    dependia de acertar o texto e excluir ficava escondido no fim da
+			    folha de edição — que o teclado cobria no celular. */}
+			<Folha
+				titulo={acoes?.title ?? 'Hábito'}
+				sobre="O que você quer fazer com ele"
+				aberta={acoes !== null}
+				onFechar={() => setAcoes(null)}
+			>
+				<div className="opcoes-criacao">
+					<button
+						type="button"
+						className="opcao-criacao"
+						onClick={() => {
+							const alvo = acoes
+							setAcoes(null)
+							if (alvo) setEditando(alvo)
+						}}
+					>
+						<span className="opcao-criacao__icone" aria-hidden="true">
+							<IconeEditar size={22} />
+						</span>
+						<span className="opcao-criacao__texto">
+							<span className="opcao-criacao__titulo">Editar hábito</span>
+							<span className="opcao-criacao__descricao">
+								Nome, detalhe, dias, meta, horário e cor
+							</span>
+						</span>
+					</button>
+
+					<button
+						type="button"
+						className="opcao-criacao"
+						onClick={() => {
+							const alvo = acoes
+							setAcoes(null)
+							if (!alvo) return
+							// Abre a mesma confirmação que o formulário usa. Antes
+							// este item apagava no primeiro toque.
+							setExcluindo(alvo)
+						}}
+					>
+						<span
+							className="opcao-criacao__icone"
+							aria-hidden="true"
+							style={{ color: 'var(--error)' }}
+						>
+							<IconeApagar size={22} />
+						</span>
+						<span className="opcao-criacao__texto">
+							<span className="opcao-criacao__titulo" style={{ color: 'var(--error)' }}>
+								Excluir hábito
+							</span>
+							<span className="opcao-criacao__descricao">
+								Remove o histórico de dias dele. Pergunta antes.
+							</span>
+						</span>
+					</button>
+				</div>
+			</Folha>
+
+			{/* Confirmação única, usada pelo menu ⋮ e pelo formulário. */}
+			<Folha
+				titulo="Excluir hábito"
+				aberta={excluindo !== null}
+				onFechar={() => setExcluindo(null)}
+			>
+				<div className="formulario">
+					<p className="nota">
+						Excluir <strong>{excluindo?.title}</strong> remove o histórico de dias dele. Não dá para
+						desfazer.
+					</p>
+					<div className="formulario__acoes">
+						<button type="button" className="botao" onClick={() => setExcluindo(null)}>
+							Manter
+						</button>
+						<button
+							type="button"
+							className="botao botao--perigo-solido"
+							onClick={() => {
+								const alvo = excluindo
+								setExcluindo(null)
+								if (alvo) void excluirHabito(alvo.id)
+							}}
+						>
+							<IconeApagar size={18} />
+							Excluir
+						</button>
+					</div>
+				</div>
+			</Folha>
 		</div>
 	)
 }
@@ -209,13 +316,15 @@ function CartaoHabito({
 	hoje,
 	onRegistrar,
 	onEditar,
+	onAcoes,
 }: {
 	habito: HabitoCalculado
 	hoje: string
 	onRegistrar: () => void
 	onEditar: () => void
+	onAcoes: () => void
 }) {
-	const cor = corDoIndice(habito.cor ?? 0).hex
+	const cor = corDe(habito.cor).hex
 	const dataHoje = new Date(`${hoje}T12:00:00`)
 
 	// A semana mostrada termina no domingo seguinte, sempre com 7 dias.
@@ -284,6 +393,18 @@ function CartaoHabito({
 						<IconeFogo size={16} />
 						{habito.sequencia}
 					</span>
+					{/* Menu do hábito: editar e excluir existiam, mas só por dentro
+					    do detalhe ou tocando no texto. Aqui ficam a um toque, como
+					    na tarefa. */}
+					<button
+						type="button"
+						className="botao-icone botao-icone--pequeno"
+						aria-label={`Ações de ${habito.title}`}
+						title="Editar ou excluir"
+						onClick={onAcoes}
+					>
+						<IconeMaisVertical size={18} />
+					</button>
 				</div>
 			</div>
 
@@ -392,14 +513,21 @@ function FormularioHabito({
 	aberto,
 	habito,
 	onFechar,
+	onExcluir,
 }: {
 	aberto: boolean
 	habito?: Habit | null
 	onFechar: () => void
+	/**
+	 * Pede a exclusão à tela. A confirmação é UMA só (a de `Habitos`), usada
+	 * tanto por aqui quanto pelo menu ⋮ — antes cada caminho tinha a sua, e a
+	 * do menu apagava no primeiro toque.
+	 */
+	onExcluir?: (habito: Habit) => void
 }) {
 	const [titulo, setTitulo] = useState(habito?.title ?? '')
 	const [descricao, setDescricao] = useState(habito?.description ?? '')
-	const [cor, setCor] = useState(Number(habito?.cor ?? 0))
+	const [cor, setCor] = useState<number | string>(habito?.cor ?? 0)
 	const [hora, setHora] = useState(
 		habito?.startMin != null
 			? `${String(Math.floor(habito.startMin / 60)).padStart(2, '0')}:${String(habito.startMin % 60).padStart(2, '0')}`
@@ -408,7 +536,6 @@ function FormularioHabito({
 	const [dias, setDias] = useState<number[]>(habito?.dias ?? [])
 	const [meta, setMeta] = useState(habito?.targetValue ? String(habito.targetValue) : '')
 	const [unidade, setUnidade] = useState(habito?.targetUnit ?? '')
-	const [confirmando, setConfirmando] = useState(false)
 
 	// O formulário nasce de um hábito diferente a cada abertura: reinicia os
 	// campos quando a folha abre, sem precisar remontar o componente.
@@ -427,7 +554,6 @@ function FormularioHabito({
 		setDias(habito?.dias ?? [])
 		setMeta(habito?.targetValue ? String(habito.targetValue) : '')
 		setUnidade(habito?.targetUnit ?? '')
-		setConfirmando(false)
 	}
 
 	async function salvar(): Promise<void> {
@@ -459,37 +585,14 @@ function FormularioHabito({
 			sobre="Marque os dias em que ele vale. Sem dia marcado, vale todos."
 			aberta={aberto}
 			onFechar={onFechar}
-			passo={confirmando ? 'excluir' : 'form'}
 		>
-			{confirmando ? (
-				<div className="formulario">
-					<p className="nota">
-						Excluir <strong>{habito?.title}</strong> remove o histórico de dias dele. Não dá para desfazer.
-					</p>
-					<div className="formulario__acoes">
-						<button type="button" className="botao" onClick={() => setConfirmando(false)}>
-							Manter
-						</button>
-						<button
-							type="button"
-							className="botao botao--perigo-solido"
-							onClick={() => {
-								if (habito) void excluirHabito(habito.id)
-								onFechar()
-							}}
-						>
-							Excluir
-						</button>
-					</div>
-				</div>
-			) : (
-				<form
-					className="formulario"
-					onSubmit={(evento) => {
-						evento.preventDefault()
-						void salvar()
-					}}
-				>
+			<form
+				className="formulario"
+				onSubmit={(evento) => {
+					evento.preventDefault()
+					void salvar()
+				}}
+			>
 					<div>
 						<label className="campo-rotulo" htmlFor="hab-titulo">
 							Nome
@@ -532,8 +635,10 @@ function FormularioHabito({
 										style={{
 											flex: 1,
 											justifyContent: 'center',
-											background: ativo ? corDoIndice(cor).hex : undefined,
-											color: ativo ? '#fff' : undefined,
+											background: ativo ? corDe(cor).hex : undefined,
+											// A tinta é calculada sobre a cor escolhida: branco
+											// fixo sobre âmbar dava 2,3:1, e sobre gesso 1,4:1.
+											color: ativo ? tintaSobre(corDe(cor).hex) : undefined,
 										}}
 										aria-pressed={ativo}
 										aria-label={capitalizar(DIAS_LONGOS[indice] ?? '')}
@@ -599,24 +704,19 @@ function FormularioHabito({
 
 					<div>
 						<span className="campo-rotulo">Cor</span>
-						<div className="amostra-cores" style={{ padding: '4px 0 0' }} role="group" aria-label="Cor do hábito">
-							{PALETA.map((item) => (
-								<button
-									key={item.indice}
-									type="button"
-									className="amostra-cor"
-									style={{ background: item.hex }}
-									aria-label={item.rotulo}
-									aria-pressed={cor === item.indice}
-									onClick={() => setCor(item.indice)}
-								/>
-							))}
-						</div>
+						<EscolherCor valor={cor} onMudar={setCor} rotulo="Cor do hábito" />
 					</div>
 
 					<div className="formulario__acoes" style={{ justifyContent: 'space-between' }}>
-						{habito ? (
-							<button type="button" className="botao botao--perigo" onClick={() => setConfirmando(true)}>
+						{habito && onExcluir ? (
+							<button
+								type="button"
+								className="botao botao--perigo"
+								onClick={() => {
+									onFechar()
+									onExcluir(habito)
+								}}
+							>
 								<IconeApagar size={18} />
 								Excluir
 							</button>
@@ -628,7 +728,6 @@ function FormularioHabito({
 						</button>
 					</div>
 				</form>
-			)}
 		</Folha>
 	)
 }
@@ -761,7 +860,7 @@ export function HabitoDetalhe({ id }: { id: string }) {
 		)
 	}
 
-	const cor = corDoIndice(habito.cor ?? 0).hex
+	const cor = corDe(habito.cor).hex
 
 	return (
 		<div className="tela" style={estiloCor(habito.cor ?? 0)}>
@@ -847,7 +946,8 @@ export function HabitoDetalhe({ id }: { id: string }) {
 										background: dia.registro
 											? cor
 											: 'var(--surface-container-high)',
-										color: dia.registro ? '#fff' : 'var(--on-surface-variant)',
+										// Mesma regra: tinta por contraste real, não branco fixo.
+										color: dia.registro ? tintaSobre(cor) : 'var(--on-surface-variant)',
 									}}
 								>
 									{dia.data.getDate()}

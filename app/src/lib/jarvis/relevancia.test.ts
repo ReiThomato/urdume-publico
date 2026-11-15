@@ -42,7 +42,7 @@ describe('fórmula de relevância', () => {
 		expect(veredito.relevancia).toBeGreaterThan(CORTE.ativo)
 	})
 
-	it('um sinal informativo nunca interrompe', () => {
+	it('um sinal informativo sem urgência não interrompe', () => {
 		const veredito = avaliar(sinal({ nivel: 'informativo' }), prefs(), contexto())
 		expect(veredito.interrompe).toBe(false)
 	})

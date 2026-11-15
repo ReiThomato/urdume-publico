@@ -12,6 +12,14 @@ const NOMES_ORDEM: Record<Ordem, string> = {
 	alfabetica: 'A–Z',
 }
 
+/** Opções do filtro de prioridade. `null` = todas. */
+export const PRIORIDADES: Array<{ rotulo: string; valor: number | null }> = [
+	{ rotulo: 'Todas', valor: null },
+	{ rotulo: 'Baixa+', valor: 1 },
+	{ rotulo: 'Média+', valor: 2 },
+	{ rotulo: 'Alta', valor: 3 },
+]
+
 /** Aplica a ordem escolhida sobre uma lista de tarefas. */
 export function ordenar(tarefas: Task[], ordem: Ordem): Task[] {
 	const copia = [...tarefas]
@@ -36,20 +44,29 @@ export interface Filtro {
 	etiqueta: string | null
 	projetoId: string | null
 	soAtrasadas: boolean
+	/**
+	 * Prioridade mínima, ou `null` para todas.
+	 *
+	 * Era um campo solto (um `<select>` de prioridade no formulário de tarefa) e
+	 * não existia como filtro. Aqui é filtro de lista, no mesmo controle
+	 * segmentado de "Ordenar por": uma linha, quatro opções, sem abrir nada.
+	 */
+	prioridade: number | null
 }
 
-export const FILTRO_VAZIO: Filtro = { etiqueta: null, projetoId: null, soAtrasadas: false }
-
-export function temFiltroAtivo(f: Filtro): boolean {
-	return Boolean(f.etiqueta || f.projetoId || f.soAtrasadas)
+export const FILTRO_VAZIO: Filtro = {
+	etiqueta: null,
+	projetoId: null,
+	soAtrasadas: false,
+	prioridade: null,
 }
-
 /** Aplica o filtro; a contagem é feita para mostrar quantos saíram. */
 export function filtrar(tarefas: Task[], filtro: Filtro, hoje: string): Task[] {
 	return tarefas.filter((t) => {
 		if (filtro.etiqueta && !(t.tags ?? []).includes(filtro.etiqueta)) return false
 		if (filtro.projetoId && t.projectId !== filtro.projetoId) return false
 		if (filtro.soAtrasadas && !(t.dueDate && t.dueDate < hoje && !t.done)) return false
+		if (filtro.prioridade !== null && (t.priority ?? 0) < filtro.prioridade) return false
 		return true
 	})
 }
@@ -82,6 +99,7 @@ export function BarraDeOrdem({
 		if (filtro.etiqueta) total++
 		if (filtro.projetoId) total++
 		if (filtro.soAtrasadas) total++
+		if (filtro.prioridade !== null) total++
 		return total
 	}, [filtro])
 
@@ -121,6 +139,35 @@ export function BarraDeOrdem({
 						Limpar
 					</button>
 				) : null}
+			</div>
+
+			{/*
+			 * Prioridade: controle segmentado, sempre visível.
+			 *
+			 * Não é um chip que abre um painel: prioridade é uma escolha de três
+			 * níveis, cabe numa linha e é consultada com frequência. O padrão é
+			 * o mesmo "Ordenar por" dos Projetos — rótulo acima, uma faixa só.
+			 */}
+			<div className="opcao-grupo">
+				<span className="opcao-grupo__rotulo">Prioridade</span>
+				<div className="segmentado" role="group" aria-label="Filtrar por prioridade">
+					{PRIORIDADES.map((opcao) => (
+						<button
+							key={opcao.rotulo}
+							type="button"
+							className="segmentado__item"
+							aria-pressed={filtro.prioridade === opcao.valor}
+							onClick={() =>
+								onFiltro({
+									...filtro,
+									prioridade: filtro.prioridade === opcao.valor ? null : opcao.valor,
+								})
+							}
+						>
+							{opcao.rotulo}
+						</button>
+					))}
+				</div>
 			</div>
 
 			{painel === 'ordem' ? (

@@ -22,7 +22,7 @@ export function SimboloUrdume({ tamanho = 28 }: { tamanho?: number }) {
 			height={tamanho}
 			viewBox="0 0 256 256"
 			role="img"
-			aria-label="Urdume Público"
+			aria-label="Urdume"
 			focusable="false"
 		>
 			<path
@@ -51,7 +51,7 @@ export function SimboloUrdume({ tamanho = 28 }: { tamanho?: number }) {
  */
 export function MarcaUrdume() {
 	return (
-		<span className="marca" aria-label="Urdume Público">
+		<span className="marca" aria-label="Urdume">
 			<span className="marca__simbolo" aria-hidden="true">
 				<SimboloUrdume tamanho={30} />
 			</span>

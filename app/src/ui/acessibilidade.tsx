@@ -8,7 +8,7 @@ import { getSetting, setSetting, useSetting } from '@/db/repo'
  * do app (Android 7+ nem sempre respeita o tamanho do sistema no WebView), e o
  * alto contraste passa a existir como opção explícita (WCAG 1.4.6, nível AAA).
  */
-export type TamanhoTexto = 'normal' | 'grande' | 'maior'
+type TamanhoTexto = 'normal' | 'grande' | 'maior'
 
 export function useAcessibilidade(): {
 	tamanho: TamanhoTexto

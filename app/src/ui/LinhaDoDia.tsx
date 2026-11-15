@@ -1,8 +1,7 @@
 import { useMemo } from 'react'
 import type { Evento, Task } from '@/db/db'
 import { useEventosDoDia } from '@/db/use-eventos'
-import { corDoProjeto } from '@/ui/cores'
-import { corDoIndice } from '@/ui/paleta'
+import { estiloCor, estiloCorProjeto } from '@/ui/cores'
 import { IconeHorario } from '@/ui/icones'
 
 /**
@@ -11,20 +10,40 @@ import { IconeHorario } from '@/ui/icones'
  * É o que transforma o calendário em "como está meu dia" em vez de "que dia é
  * hoje". Itens com hora ficam na posição relativa; sem hora, em pílulas acima.
  * A régua cresce das 7h às 22h por padrão e se estende quando há algo fora.
+ *
+ * ## A cor do projeto
+ *
+ * Antes as tarefas eram pintadas com `corDoProjeto(tarefa.projectId)` — só o
+ * id. A assinatura é `(id, escolhida)`, então a cor ESCOLHIDA no projeto era
+ * ignorada e a agenda mostrava a cor derivada do hash do id: dois projetos com
+ * cores escolhidas diferentes apareciam iguais. Agora a tela que conhece os
+ * projetos passa um mapa de cores, e a agenda usa a cor de verdade.
  */
-export function LinhaDoDia({
-	dia,
-	tarefas,
-	onConcluir,
-	onAbrirEvento,
-}: {
+export interface LinhaDoDiaProps {
 	dia: string
 	tarefas: Task[]
 	onConcluir: (id: string, titulo: string) => void
 	/** Toque num evento abre o editor (id pode ser sintático: id@data). */
 	onAbrirEvento?: (evento: Evento) => void
-}) {
+	/**
+	 * Cor escolhida de cada projeto, por id. Sem mapa, a cor cai na derivação
+	 * pelo id — o comportamento antigo, para quem não tem os projetos à mão.
+	 */
+	coresDosProjetos?: Map<string, string | number | null>
+}
+
+export function LinhaDoDia({
+	dia,
+	tarefas,
+	onConcluir,
+	onAbrirEvento,
+	coresDosProjetos,
+}: LinhaDoDiaProps) {
 	const eventos = useEventosDoDia(dia)
+
+	/** Estilo da cor de uma tarefa: a cor do projeto, se conhecida. */
+	const estiloDaTarefa = (projectId: string | null | undefined): ReturnType<typeof estiloCor> =>
+		estiloCorProjeto(projectId, projectId ? coresDosProjetos?.get(projectId) : null)
 
 	const comHora = useMemo(() => {
 		const itens: Array<
@@ -66,11 +85,7 @@ export function LinhaDoDia({
 				{diaInteiro.length || semHora.length ? (
 					<div className="agenda-sem-hora" style={{ padding: 'var(--s-3)' }}>
 						{diaInteiro.map((evento) => (
-							<div
-								key={evento.id}
-								className="pilula-tarefa"
-								style={{ ['--cor-cat' as string]: corDoIndice(evento.cor).hex }}
-							>
+							<div key={evento.id} className="pilula-tarefa" style={estiloCor(evento.cor)}>
 								{evento.title}
 								<span className="nota">dia inteiro</span>
 							</div>
@@ -80,7 +95,7 @@ export function LinhaDoDia({
 								key={tarefa.id}
 								type="button"
 								className="pilula-tarefa"
-								style={{ ['--cor-cat' as string]: corDoProjeto(tarefa.projectId).hex }}
+								style={estiloDaTarefa(tarefa.projectId)}
 								onClick={() => {
 									if (!tarefa.done) onConcluir(tarefa.id, tarefa.title)
 								}}
@@ -126,7 +141,7 @@ export function LinhaDoDia({
 								type="button"
 								className="agenda-bloco agenda-bloco--evento"
 								style={{
-									['--cor-cat' as string]: corDoIndice(item.evento.cor).hex,
+									...estiloCor(item.evento.cor),
 									top: `${(item.inicio - inicioJanela) * ESCALA}px`,
 									height: `${Math.max((item.fim - item.inicio) * ESCALA, 26)}px`,
 								}}
@@ -142,7 +157,7 @@ export function LinhaDoDia({
 								type="button"
 								className="agenda-bloco agenda-bloco--tarefa"
 								style={{
-									['--cor-cat' as string]: corDoProjeto(item.tarefa.projectId).hex,
+									...estiloDaTarefa(item.tarefa.projectId),
 									top: `${(item.inicio - inicioJanela) * ESCALA}px`,
 									height: `${Math.max((item.fim - item.inicio) * ESCALA, 26)}px`,
 								}}
@@ -174,7 +189,7 @@ export function LinhaDoDia({
 							key={evento.id}
 							type="button"
 							className="pilula-tarefa"
-							style={{ ['--cor-cat' as string]: corDoIndice(evento.cor).hex }}
+							style={estiloCor(evento.cor)}
 							onClick={() => onAbrirEvento?.(evento)}
 							aria-label={`Editar ${evento.title}`}
 						>

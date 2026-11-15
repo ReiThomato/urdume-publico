@@ -2,6 +2,7 @@ import type { Evento, Habit, HabitLog, Project, Reminder, Task } from '@/db/db'
 import { proximaOcorrencia } from '@/db/eventos'
 import { concluidoNoDia, valeNoDia } from '@/db/habitos'
 import { toDayKey } from '@/db/repo'
+import { tipoDaTarefa } from '@/lib/tarefas'
 import { dentroDoSilencio } from './relevancia'
 import type { PreferenciasJarvis } from './relevancia'
 import { idDeNotificacao } from './ponte'
@@ -176,23 +177,34 @@ export function montarAgenda(material: MaterialDaAgenda): Aviso[] {
 
 	/* ------------------------------- tarefas ------------------------------- */
 
-	const abertas = tarefas.filter((tarefa) => !tarefa.done && !tarefa.someday)
+	const abertas = tarefas.filter(
+		(tarefa) => !tarefa.done && !tarefa.someday && tipoDaTarefa(tarefa) !== 'ideia',
+	)
 
 	for (const tarefa of abertas) {
 		const projeto = nomeDoProjeto(projetos, tarefa.projectId)
 		const onde = projeto ? ` · ${projeto}` : ''
+		const lembrete = tipoDaTarefa(tarefa) === 'lembrete'
 
 		// 1. Hora marcada: avisa no minuto em que ela começa.
-		if (tarefa.dueDate && tarefa.startMin != null) {
-			const em = instanteDoDia(tarefa.dueDate, tarefa.startMin)
-			if (em != null) {
-				adicionar({
-					id: idDeNotificacao(`agenda:tarefa:${tarefa.id}:${tarefa.dueDate}`),
-					titulo: tarefa.title,
-					corpo: `Tarefa marcada para agora${onde}.`,
-					em,
-					chave: `agenda:tarefa:${tarefa.id}:${tarefa.dueDate}`,
-				})
+		//
+		// Lembrete tem dois caminhos: com dia e hora, como a tarefa; só com
+		// hora (sem dia), para hoje — que é o caso de "me lembra às 15h"
+		// criado sem escolher data. Sem hora, não agenda nada: um lembrete é
+		// silencioso até você decidir quando ele deve falar.
+		if (tarefa.startMin != null) {
+			const diaDaHora = tarefa.dueDate ?? (lembrete ? toDayKey(new Date(agora)) : null)
+			if (diaDaHora) {
+				const em = instanteDoDia(diaDaHora, tarefa.startMin)
+				if (em != null) {
+					adicionar({
+						id: idDeNotificacao(`agenda:tarefa:${tarefa.id}:${diaDaHora}`),
+						titulo: tarefa.title,
+						corpo: lembrete ? `Lembrete${onde}.` : `Tarefa marcada para agora${onde}.`,
+						em,
+						chave: `agenda:tarefa:${tarefa.id}:${diaDaHora}`,
+					})
+				}
 			}
 		}
 

@@ -6,9 +6,10 @@ descrevendo o problema — economiza tempo dos dois lados.
 ## Preparar
 
 ```bash
+cd app
 npm install
 npm run dev      # navegador, com recarga rápida
-npm test         # 295 testes
+npm test         # 569 testes
 npx tsc -b       # tipos
 ```
 
@@ -48,11 +49,19 @@ Um teste que depende do relógio vai falhar à noite sem defeito nenhum. Se a
 função olha para "hoje", passe uma data fixa ou congele o horário. Isso já
 aconteceu duas vezes neste projeto.
 
+Os testes rodam em Node com `fake-indexeddb`: cada um abre um banco próprio
+(`new NexoDatabase('nome-do-teste')`) e o apaga no fim. Não compartilhe banco
+entre testes — vazamento de estado entre eles é a causa mais comum de falha
+intermitente.
+
 ## O que não entra
 
 - **tldraw ou qualquer código com licença incompatível** com PolyForm
   Noncommercial. Há teste que falha se aparecer.
 - **Servidor, sincronização ou chave de API embutida.** A variante é local.
+- **Os módulos do motor de inteligência exclusivo** (`memorias`, `vinculos`,
+  `pensamentos`, `perfil`, `insights`, `recusas`, `padroes`, `assuntos`). Eles
+  ficam na versão principal; o `isolamento.test.ts` recusa a volta.
 - **Endereço privado, dado pessoal do autor, telemetria.** Também há teste.
 - **Mudar `appId`/`applicationId`/nome do banco** para o de outro app. Ver
   `isolamento.test.ts`.

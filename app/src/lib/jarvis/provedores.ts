@@ -40,7 +40,17 @@ export type Dialeto = 'openai' | 'gemini' | 'anthropic'
 
 export interface Provedor {
 	id: IdProvedor
+	/** Nome completo, para título e mensagem. */
 	nome: string
+	/**
+	 * Rótulo curto, para o seletor.
+	 *
+	 * Cinco provedores não cabem numa fileira com o nome completo: medido, o
+	 * grupo de 348 px dava 67 px por item e "OpenAI (ChatGPT)" era cortado.
+	 * Aqui fica o essencial, e o nome completo continua no `aria-label` do
+	 * botão e no título da seção.
+	 */
+	curto: string
 	dialeto: Dialeto
 	/** Endpoint completo. */
 	url: string
@@ -66,6 +76,7 @@ export const PROVEDORES: Record<IdProvedor, Provedor> = {
 	openai: {
 		id: 'openai',
 		nome: 'OpenAI (ChatGPT)',
+		curto: 'OpenAI',
 		dialeto: 'openai',
 		url: 'https://api.openai.com/v1/chat/completions',
 		ondePegarChave: 'platform.openai.com/api-keys',
@@ -76,6 +87,7 @@ export const PROVEDORES: Record<IdProvedor, Provedor> = {
 	gemini: {
 		id: 'gemini',
 		nome: 'Google Gemini',
+		curto: 'Gemini',
 		dialeto: 'gemini',
 		url: 'https://generativelanguage.googleapis.com/v1beta/models',
 		ondePegarChave: 'aistudio.google.com/apikey',
@@ -86,6 +98,7 @@ export const PROVEDORES: Record<IdProvedor, Provedor> = {
 	claude: {
 		id: 'claude',
 		nome: 'Anthropic (Claude)',
+		curto: 'Claude',
 		dialeto: 'anthropic',
 		url: 'https://api.anthropic.com/v1/messages',
 		ondePegarChave: 'console.anthropic.com/settings/keys',
@@ -96,6 +109,7 @@ export const PROVEDORES: Record<IdProvedor, Provedor> = {
 	deepseek: {
 		id: 'deepseek',
 		nome: 'DeepSeek',
+		curto: 'DeepSeek',
 		dialeto: 'openai',
 		url: 'https://api.deepseek.com/chat/completions',
 		ondePegarChave: 'platform.deepseek.com/api_keys',
@@ -106,6 +120,7 @@ export const PROVEDORES: Record<IdProvedor, Provedor> = {
 	openrouter: {
 		id: 'openrouter',
 		nome: 'OpenRouter',
+		curto: 'OpenRouter',
 		dialeto: 'openai',
 		url: 'https://openrouter.ai/api/v1/chat/completions',
 		ondePegarChave: 'openrouter.ai/keys',

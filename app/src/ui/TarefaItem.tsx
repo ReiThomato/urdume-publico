@@ -4,6 +4,7 @@ import type { Task } from '@/db/db'
 import {
 	IconeAdicionar,
 	IconeApagar,
+	IconeArquivar,
 	IconeBandeira,
 	IconeConcluir,
 	IconeEditar,
@@ -12,13 +13,13 @@ import {
 	IconeRepetir,
 } from '@/ui/icones'
 import { estiloCor } from '@/ui/cores'
-import { corDoIndice } from '@/ui/paleta'
 import { escrever } from '@/lib/falhas'
+import { ROTULO_DO_TIPO, tipoDaTarefa } from '@/lib/tarefas'
 
-export interface TarefaItemProps {
+interface TarefaItemProps {
 	tarefa: Task
 	/** Nome e cor da lista à qual pertence (projeto), quando houver. */
-	lista?: { nome: string; cor: number | string | null; id: string }
+	lista?: { nome: string; cor?: number | string | null; id: string }
 	onConcluir?: (id: string, titulo: string) => void
 	onEditar?: (tarefa: Task) => void
 	onExcluir?: (tarefa: Task) => void
@@ -26,7 +27,6 @@ export interface TarefaItemProps {
 	mostrarData?: boolean
 	atrasada?: boolean
 }
-
 function horaTexto(min: number): string {
 	return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
 }
@@ -71,10 +71,13 @@ export function TarefaItem({
 
 	const progresso = progressoDeSubtarefas(tarefa)
 	const subtarefas = tarefa.subtasks ?? []
-	const cor = lista ? (typeof lista.cor === 'number' ? lista.cor : Number(lista.cor ?? corDoIndice(0).indice)) : null
+	// Cor por valor cru: `estiloCor`/`corDe` aceitam índice e hex. Converter
+	// com `Number` transformava um hex em NaN e a lista perdia a cor escolhida.
+	const cor = lista ? lista.cor : null
 
 	const prioridade = (tarefa.priority ?? 0) as 0 | 1 | 2 | 3
 	const temPrioridade = prioridade > 0
+	const tipo = tipoDaTarefa(tarefa)
 
 	async function criarSubtarefa(): Promise<void> {
 		const texto = novaSubtarefa.trim()
@@ -138,6 +141,15 @@ export function TarefaItem({
 					<span className="tarefa__titulo">{tarefa.title}</span>
 				</span>
 				<span className="tarefa__meta">
+					{/* O tipo aparece só quando NÃO é tarefa: uma linha comum não
+					    precisa da palavra "Tarefa" repetida em cada item. */}
+					{tipo !== 'tarefa' ? (
+						<span className="etiqueta etiqueta--tipo" data-tipo={tipo}>
+							{tipo === 'lembrete' ? <IconeHorario size={12} /> : <IconeArquivar size={12} />}
+							{ROTULO_DO_TIPO[tipo].nome}
+						</span>
+					) : null}
+
 					{temPrioridade ? (
 						<span className="etiqueta etiqueta--prioridade" data-prioridade={prioridade}>
 							{PRIORIDADES[prioridade]!.rotulo}

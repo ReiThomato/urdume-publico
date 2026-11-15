@@ -95,7 +95,6 @@ async function lerAtual(
 		task: () => database.tasks.get(id),
 		project: () => database.projects.get(id),
 		reminder: () => database.reminders.get(id),
-		page: () => database.pages.get(id),
 		event: () => database.events.get(id),
 		habit: () => database.habits.get(id),
 		habitLog: () => database.habitLogs.get(id),
@@ -105,6 +104,52 @@ async function lerAtual(
 	if (!leitor) return undefined
 	const linha = await leitor()
 	return (linha as Record<string, unknown> | undefined) ?? undefined
+}
+
+/**
+ * Campos que NUNCA entram no diário.
+ *
+ * O diário guarda fato, não conteúdo. Uma página tem snapshot e miniatura; sem
+ * este corte, cada salvamento gravava as duas cópias em `antes` e `depois`.
+ * Medido antes da correção: 40 salvamentos de um quadro pequeno = 3,97 MB.
+ *
+ * O diário não precisa do desenho para nada — serve para auditoria e desfazer
+ * de estado. Do que é pesado, interessa que mudou e o tamanho.
+ */
+const CAMPOS_PESADOS = ['snapshot', 'thumbnail'] as const
+
+/** Acima disso, um campo de texto é tratado como conteúdo e resumido. */
+const LIMITE_DE_CAMPO = 4_000
+
+function enxugar(valor: unknown): unknown {
+	if (valor == null || typeof valor !== 'object') return valor
+	if (Array.isArray(valor)) return valor
+
+	const origem = valor as Record<string, unknown>
+	const saida: Record<string, unknown> = {}
+	let mudou = false
+
+	for (const [chave, bruto] of Object.entries(origem)) {
+		if ((CAMPOS_PESADOS as readonly string[]).includes(chave)) {
+			mudou = true
+			if (typeof bruto === 'string' && bruto.length > 0) {
+				saida[`${chave}Bytes`] = bruto.length
+			}
+			saida[chave] = null
+			continue
+		}
+
+		if (typeof bruto === 'string' && bruto.length > LIMITE_DE_CAMPO) {
+			mudou = true
+			saida[`${chave}Bytes`] = bruto.length
+			saida[chave] = `${bruto.slice(0, 200)}…`
+			continue
+		}
+
+		saida[chave] = bruto
+	}
+
+	return mudou ? saida : valor
 }
 
 /**
@@ -134,8 +179,8 @@ export async function registrarFato(
 		entidade: dados.entidade,
 		acao: dados.acao,
 		origem: dados.origem ?? origemCorrente,
-		antes: dados.antes,
-		depois: dados.depois,
+		antes: enxugar(dados.antes),
+		depois: enxugar(dados.depois),
 		fingerprint: dados.fingerprint ?? null,
 	}
 

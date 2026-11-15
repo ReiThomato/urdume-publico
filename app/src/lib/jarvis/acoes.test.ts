@@ -57,16 +57,18 @@ describe('vocabulário de ações', () => {
 		expect(await listarRegistros(banco)).toHaveLength(0)
 	})
 
-	it('cria lembrete', async () => {
+	it('cria lembrete e projeto', async () => {
 		const r = await executarLote(
 			[
 				acao('criar_lembrete', { texto: 'Ligar para o fornecedor' }),
+				acao('criar_projeto', { nome: 'Rascunho do layout' }),
 			],
 			banco,
 		)
 
-		expect(r.executadas).toBe(1)
+		expect(r.executadas).toBe(2)
 		expect(await banco.reminders.count()).toBe(1)
+		expect(await banco.projects.count()).toBe(1)
 	})
 
 	it('conclui marco e desfaz voltando ao estado anterior', async () => {
@@ -182,7 +184,7 @@ describe('risco dos tipos novos', () => {
 			'criar_tarefa', 'editar_tarefa', 'concluir_tarefa', 'criar_projeto',
 			'editar_projeto', 'criar_marco', 'concluir_marco', 'criar_evento',
 			'concluir_evento', 'criar_lembrete', 'criar_habito', 'registrar_habito',
-			'anotar_em_projeto',
+			'criar_pagina', 'anotar_em_projeto',
 		]
 		for (const tipo of tipos) {
 			expect(tipo).not.toMatch(/excluir|apagar|delete|remover/)

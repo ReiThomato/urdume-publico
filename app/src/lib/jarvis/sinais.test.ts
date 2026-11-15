@@ -336,6 +336,101 @@ describe('sinais de agenda e hábitos', () => {
 
 		expect(ids(avaliarSinais(r))).not.toContain('habito_sequencia_quebrada')
 	})
+
+	/**
+	 * Os dois defeitos que o dono do app viu ao criar um hábito.
+	 *
+	 * Ambos vinham de o retrato tratar "sem histórico" como "999 dias" e de
+	 * cobrar a semana inteira de um hábito que acabou de nascer.
+	 */
+	it('hábito recém-criado não é acusado de 999 dias sem registro', () => {
+		const habito: Habit = {
+			id: 'h1',
+			title: 'Alongar',
+			order: 0,
+			dias: [],
+			targetValue: 0,
+			targetUnit: '',
+			createdAt: AGORA - 60_000,
+			updatedAt: AGORA - 60_000,
+		}
+
+		const r = montarRetrato(fontes({ habits: [habito] }))
+		expect(r.habitos[0]!.diasSemRegistro).toBe(0)
+		expect(r.habitos[0]!.diasDesdeCriacao).toBe(0)
+		expect(ids(avaliarSinais(r))).not.toContain('habito_abandonado')
+	})
+
+	it('hábito criado hoje com dois dias marcados não acusa "semana fraca"', () => {
+		/*
+		 * O caso do dono do app: cria um hábito com dois dias da semana e o
+		 * Jarvis responde "semana fraca, 0 de 2". A janela de sete dias contava
+		 * dias ANTERIORES à criação do hábito.
+		 *
+		 * Hoje é quinta (12/11); o hábito vale segunda, quarta e quinta. A
+		 * janela vê os três — mas só a quinta é posterior à criação, então ele
+		 * deve UM dia, não três.
+		 */
+		const habito: Habit = {
+			id: 'h1',
+			title: 'Correr',
+			order: 0,
+			dias: [1, 3, 4],
+			targetValue: 0,
+			targetUnit: '',
+			createdAt: AGORA - 60_000,
+			updatedAt: AGORA - 60_000,
+		}
+
+		const r = montarRetrato(fontes({ habits: [habito] }))
+		expect(r.habitos[0]!.devidosNaSemana).toBe(1)
+		expect(ids(avaliarSinais(r))).not.toContain('habito_semana_ruim')
+	})
+
+	it('hábito antigo que ninguém marcou continua sendo acusado', () => {
+		const habito: Habit = {
+			id: 'h1',
+			title: 'Ler',
+			order: 0,
+			dias: [],
+			targetValue: 0,
+			targetUnit: '',
+			createdAt: AGORA - 20 * 86_400_000,
+			updatedAt: AGORA - 20 * 86_400_000,
+		}
+
+		const r = montarRetrato(fontes({ habits: [habito] }))
+		expect(r.habitos[0]!.diasSemRegistro).toBe(20)
+		expect(ids(avaliarSinais(r))).toContain('habito_abandonado')
+	})
+
+	it('dois dias marcados e um feito ainda deixam a semana em dia', () => {
+		// Terça 10/11 e quinta 12/11, criado em 09/11 (segunda). Hoje 14/11.
+		const habito: Habit = {
+			id: 'h1',
+			title: 'Correr',
+			order: 0,
+			dias: [2, 4],
+			targetValue: 0,
+			targetUnit: '',
+			createdAt: new Date(2026, 10, 9, 8, 0, 0).getTime(),
+			updatedAt: AGORA,
+		}
+
+		const r = montarRetrato(
+			fontes({
+				habits: [habito],
+				habitLogs: [
+					{ id: 'l1', habitId: 'h1', day: '2026-11-10', value: 1, createdAt: AGORA, updatedAt: AGORA },
+					{ id: 'l2', habitId: 'h1', day: '2026-11-12', value: 1, createdAt: AGORA, updatedAt: AGORA },
+				],
+			}),
+		)
+
+		expect(r.habitos[0]!.devidosNaSemana).toBe(2)
+		expect(r.habitos[0]!.feitosNaSemana).toBe(2)
+		expect(r.habitos[0]!.consistencia).toBe(100)
+	})
 })
 
 describe('regras compostas', () => {

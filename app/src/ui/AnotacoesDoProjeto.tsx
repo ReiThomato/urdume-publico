@@ -208,20 +208,28 @@ function EditorDeAnotacao({ aberto, nota, projectId, onFechar }: EditorProps) {
 	)
 }
 
-export function SecaoDeAnotacoes({ projectId }: { projectId: string }) {
+export function SecaoDeAnotacoes({
+	projectId,
+	titulo = 'Anotações',
+}: {
+	projectId: string
+	/** Título do bloco; o componente é usado dentro dos blocos do projeto. */
+	titulo?: string
+}) {
 	const notas = useAnotacoes(projectId)
 	const [editando, setEditando] = useState<ProjectNote | null>(null)
 	const [criando, setCriando] = useState(false)
 	const [confirmando, setConfirmando] = useState<ProjectNote | null>(null)
+	const idTitulo = `secao-anotacoes-${projectId}`
 
 	return (
-		<section className="secao" aria-labelledby="secao-anotacoes">
+		<section className="secao" aria-labelledby={idTitulo}>
 			<div className="secao-cabecalho">
-				<h2 className="secao-titulo" id="secao-anotacoes">
+				<h2 className="secao-titulo" id={idTitulo}>
 					<span className="secao-titulo__icone" aria-hidden="true">
 						<IconeHorario size={17} />
 					</span>
-					Anotações
+					{titulo}
 					{notas && notas.length > 0 ? (
 						<span className="secao-titulo__contagem">{notas.length}</span>
 					) : null}

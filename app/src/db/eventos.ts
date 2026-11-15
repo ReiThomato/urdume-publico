@@ -2,7 +2,6 @@ import { createId } from '@/db/id'
 import type { Evento, NexoDatabase, Recorrencia } from '@/db/db'
 import { db } from '@/db/db'
 import { registrarMudanca } from '@/lib/jarvis/diario'
-import { toDayKey } from './repo'
 
 /**
  * Anúncio de escrita da agenda.
@@ -64,12 +63,12 @@ export function proximaOcorrencia(
 
 /* ---------------------------------------------------------------- eventos */
 
-export interface CriarEventoInput {
+interface CriarEventoInput {
 	title: string
 	startAt: number
 	endAt: number
 	diaInteiro?: boolean
-	cor?: number
+	cor?: number | string
 	projectId?: string | null
 	notes?: string | null
 	local?: string | null
@@ -116,20 +115,8 @@ export async function excluirEvento(id: string, database: NexoDatabase = db): Pr
 	await anunciar(id, database)
 }
 
-/** Eventos que tocam um dia (AAAA-MM-DD), incluindo os de dia inteiro. */
-export async function eventosDoDia(dia: string): Promise<Evento[]> {
-	const todos = await db.events.toArray()
-	return todos
-		.filter((evento) => !evento.deletedAt && toDayKey(new Date(evento.startAt)) === dia)
-		.sort((a, b) => Number(b.diaInteiro) - Number(a.diaInteiro) || a.startAt - b.startAt)
-}
-
-/** Eventos de um intervalo de dias, para a linha do dia e o mês. */
-export async function eventosEntre(inicio: string, fim: string): Promise<Evento[]> {
-	const todos = await db.events.toArray()
-	return todos.filter((evento) => {
-		if (evento.deletedAt) return false
-		const dia = toDayKey(new Date(evento.startAt))
-		return dia >= inicio && dia <= fim
-	})
+/** Desfaz a exclusão do evento (a faixa de desfazer dura 4 s). */
+export async function restaurarEvento(id: string, database: NexoDatabase = db): Promise<void> {
+	await database.events.update(id, { deletedAt: null, updatedAt: Date.now() })
+	await anunciar(id, database)
 }

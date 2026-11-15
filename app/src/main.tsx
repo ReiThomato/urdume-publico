@@ -5,11 +5,14 @@ import { App } from '@/screens/Shell'
 import { aplicarTemaInicial } from '@/app/tema'
 import { aplicarAcessibilidadeSalva } from '@/ui/acessibilidade'
 import { conferirVersao } from '@/lib/higiene'
+import { migrarChavesAntigas } from '@/lib/chaves'
 import '@/styles/tokens.css'
 import '@/styles/app.css'
 import '@/styles/nav.css'
 import '@/styles/folha.css'
 import '@/styles/telas.css'
+import '@/styles/ilha.css'
+import '@/styles/roda.css'
 
 /**
  * O app é nativo (APK) ou um site no navegador?
@@ -67,14 +70,48 @@ if (!NATIVO) {
 void conferirVersao()
 
 /**
- * Botão voltar do Android (Capacitor). Se há tela anterior na pilha do
- * navegador, volta nela; na raiz, deixa o Android agir (minimizar o app).
- * Sem isso, o voltar nativo fechava o app a partir de qualquer tela.
+ * Pede armazenamento persistente.
+ *
+ * Por padrão o Chromium trata o IndexedDB como "melhor esforço": quando o
+ * aparelho fica sem espaço, ele descarta a origem inteira, sem erro e sem
+ * aviso — o app abriria vazio. Com `persist()` concedido, o navegador só apaga
+ * com a permissão do usuário.
+ *
+ * O Chrome decide sozinho se concede (histórico de uso, instalação, espaço).
+ * Falhar não é erro: o app funciona igual, apenas sem essa garantia. Por isso
+ * o resultado vai para Ajustes → Aparelho, e não para um alerta.
+ */
+void (async (): Promise<void> => {
+	try {
+		if (!navigator.storage?.persist || !navigator.storage.persisted) return
+		if (await navigator.storage.persisted()) {
+			localStorage.setItem('urdume.armazenamentoPersistente', 'sim')
+			return
+		}
+		const concedido = await navigator.storage.persist()
+		localStorage.setItem('urdume.armazenamentoPersistente', concedido ? 'sim' : 'nao')
+	} catch {
+		localStorage.setItem('urdume.armazenamentoPersistente', 'nao')
+	}
+})()
+
+/**
+ * Botão voltar do Android (Capacitor).
+ *
+ * A ordem importa: primeiro a folha aberta, depois a tela. Antes, apertar
+ * voltar com uma folha na frente navegava por trás dela (ou saía do app) e
+ * deixava a folha órfã — a única saída era o X ou arrastar a alça.
+ *
+ * - folha aberta → fecha a de cima;
+ * - há tela anterior → volta na pilha;
+ * - raiz → deixa o Android agir (minimizar).
  */
 void (async (): Promise<void> => {
 	try {
 		const { App: CapacitorApp } = await import('@capacitor/app')
+		const { fecharFolhaDoTopo } = await import('@/ui/Folha')
 		void CapacitorApp.addListener('backButton', () => {
+			if (fecharFolhaDoTopo()) return
 			if ((window.history.state?.nexo ?? 0) > 0) window.history.back()
 			else void CapacitorApp.exitApp()
 		})
@@ -89,6 +126,10 @@ if (!container) {
 	throw new Error('Elemento #root não encontrado.')
 }
 
+// Copia chaves antigas (`nexo.*`, `rabisco.*`) para os nomes atuais antes de
+// qualquer leitura — o app já se chamou Nexo e Rabisco, e renomear sem migrar
+// faria o tema e a licença do quadro "sumirem" na atualização.
+migrarChavesAntigas()
 // Aplica o tema ANTES de qualquer desenho (espelho síncrono em localStorage):
 // sem isso a primeira pintura saía na cor padrão e "piscava" para a certa.
 aplicarTemaInicial()

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useRouter } from '@/app/router'
-import type { Marco, Project, Task } from '@/db/db'
 import {
 	addMarco,
 	createTask,
 	editMarco,
 	removeMarco as removeMarcoPorId,
+	restaurarProject,
+	restaurarTask,
 	softDeleteProject,
 	softDeleteTask,
 	toggleMarco,
@@ -15,16 +16,24 @@ import {
 } from '@/db/repo'
 import { Folha } from '@/ui/Folha'
 import { SecaoDeAnotacoes } from '@/ui/AnotacoesDoProjeto'
-import { ConfirmarExclusaoTarefa } from '@/ui/ConfirmarExclusaoTarefa'
+import { ExcluirComDesfazer, FaixaDesfazer, useDesfazerExclusao } from '@/ui/ExcluirComDesfazer'
+import { escrever } from '@/lib/falhas'
+import type { BlocoDoProjeto, Marco, Project, Task } from '@/db/db'
 import { chaveDoDia, diaDeHoje } from '@/lib/date'
 import { ordenarMarcos, textoDaData } from '@/lib/projetos'
+import { blocosVisiveisDoProjeto, definicaoDoBloco } from '@/lib/blocos-projeto'
+import { estaAtrasada } from '@/lib/tarefas'
 import { Topo } from '@/ui/AppShell'
 import { TarefaItem } from '@/ui/TarefaItem'
 import { EditarTarefa } from '@/ui/EditarTarefa'
+import { EditorBlocosDoProjeto } from '@/ui/EditorBlocosDoProjeto'
+import { EditarProjeto } from '@/ui/EditarProjeto'
+import { TextoDoBlocoDoProjeto } from '@/ui/TextoDoBlocoDoProjeto'
 import { estiloCor } from '@/ui/cores'
 import {
 	IconeAdicionar,
 	IconeApagar,
+	IconeAjuste,
 	IconeBandeira,
 	IconeCalendario,
 	IconeConcluir,
@@ -33,9 +42,8 @@ import {
 	IconeEditar,
 	IconeExpandir,
 	IconePasta,
-	IconeRaio,
 } from '@/ui/icones'
-import { corDoIndice } from '@/ui/paleta'
+import { corDe } from '@/ui/paleta'
 
 /**
  * Um projeto por dentro: o painel de trabalho, não uma lista com outro nome.
@@ -45,7 +53,10 @@ import { corDoIndice } from '@/ui/paleta'
  * — qual é a próxima entrega? (marcos)
  * — o que falta fazer? (tarefas)
  * — o que foi decidido/escrito? (notas)
- * — onde está o material? (páginas)
+ *
+ * A ORDEM e a VISIBILIDADE dessas seções são configuráveis (`Project.blocos`),
+ * como no Início. Antes a ordem era fixa no código e todas apareciam sempre.
+ * Ocultar um bloco não apaga o conteúdo: ele volta ao ser mostrado.
  *
  * O contador gigante que só repetia "N tarefas abertas" saiu: era o elemento
  * mais pesado da tela e não dizia nada que a lista já não dissesse. No lugar
@@ -67,9 +78,13 @@ export function ProjetoRota({ id }: { id: string }) {
 	const [excluindoTarefa, setExcluindoTarefa] = useState<Task | null>(null)
 	const [excluindo, setExcluindo] = useState(false)
 	const [editandoProjeto, setEditandoProjeto] = useState(false)
+	const [montandoBlocos, setMontandoBlocos] = useState(false)
 	const [editandoMarco, setEditandoMarco] = useState<Marco | null>(null)
 	const [notas, setNotas] = useState('')
 	const [notasSalvas, setNotasSalvas] = useState(false)
+	// Excluir o projeto devolve um desfazer de 4 s: a tela sai para a central,
+	// e a faixa continua disponível lá para restaurar tudo.
+	const desfazerExclusao = useDesfazerExclusao()
 
 	useEffect(() => {
 		setNotas(projeto?.notas ?? '')
@@ -103,13 +118,14 @@ export function ProjetoRota({ id }: { id: string }) {
 		)
 	}
 
-	const cor = corDoIndice(Number(projeto.color ?? 0))
+	const cor = corDe(projeto.color, projeto.id)
 	const total = (tarefas ?? []).length
 	const progresso = total === 0 ? 0 : Math.round((concluidas.length / total) * 100)
 	const hoje = chaveDoDia(diaDeHoje())
-	const atrasadas = abertas.filter((t) => (t.dueDate && t.dueDate < hoje) || (t.deadline && t.deadline < hoje)).length
+	const atrasadas = abertas.filter((t) => estaAtrasada(t, hoje)).length
 	const urgentes = abertas.filter((t) => (t.priority ?? 0) >= 2).length
 	const marcosFeitos = marcos.filter((m) => m.feito).length
+	const blocos = blocosVisiveisDoProjeto(projeto)
 
 	async function salvarTarefa(): Promise<void> {
 		const texto = novaTarefa.trim()
@@ -142,41 +158,47 @@ export function ProjetoRota({ id }: { id: string }) {
 		window.setTimeout(() => setNotasSalvas(false), 2000)
 	}
 
-	return (
-		<div className="tela" style={estiloCor(Number(projeto.color ?? 0))}>
-			<Topo
-				titulo={projeto.name}
-				sobre={projeto.etapa ?? (projeto.archived ? 'Projeto arquivado' : 'Projeto')}
-				antes={
-					<Link route={{ name: 'projetos' }} className="botao-icone" ariaLabel="Voltar">
-						<IconeExpandir size={22} style={{ transform: 'rotate(90deg)' }} />
-					</Link>
-				}
-				acoes={
-					<>
-						<button
-							type="button"
-							className="botao-icone"
-							aria-label="Editar projeto"
-							onClick={() => setEditandoProjeto(true)}
-						>
-							<IconeEditar size={22} />
-						</button>
-						<button
-							type="button"
-							className="botao-icone"
-							aria-label="Excluir projeto"
-							onClick={() => setExcluindo(true)}
-						>
-							<IconeApagar size={22} />
-						</button>
-					</>
-				}
-			/>
+	/**
+	 * Exclui o projeto e sai para a central, deixando o desfazer.
+	 *
+	 * O desfazer chama `restaurarProject`, que traz o projeto E o que desceu
+	 * junto (tarefas, anotações, eventos) — não uma cópia.
+	 */
+	async function excluir(alvo: Project): Promise<void> {
+		await escrever(async () => {
+			await softDeleteProject(alvo.id)
+			navigate({ name: 'projetos' })
+			desfazerExclusao.anunciar({
+				texto: `Excluído: ${alvo.name}`,
+				restaurar: () => escrever(() => restaurarProject(alvo.id)),
+			})
+		})
+	}
 
-			<div className="conteudo">
-				{/* ------------------------------------------------ painel resumido */}
-				<div className="secao">
+	/**
+	 * Cópia estreitada do projeto para dentro do renderizador.
+	 *
+	 * `projeto` já foi checado contra `undefined` e `null` acima, mas uma
+	 * FUNÇÃO declarada depois desse ponto não herda o estreitamento: o
+	 * compilador considera que ela poderia ser chamada quando o valor fosse
+	 * nulo. A constante resolve isso sem `!` espalhado pelo JSX.
+	 */
+	const projetoAtual: Project = projeto
+
+	/**
+	 * Um bloco da tela.
+	 *
+	 * A função existe para o `map` dos blocos; cada tipo tem sua própria
+	 * leitura de dados. O título vem de `bloco.titulo` (renomeável) e cai no
+	 * padrão do tipo quando vazio.
+	 */
+	function renderizarBloco(bloco: BlocoDoProjeto) {
+		const def = definicaoDoBloco(bloco.tipo)
+		const titulo = bloco.titulo?.trim() || def.tituloPadrao
+
+		if (bloco.tipo === 'painel') {
+			return (
+				<div className="secao" key={bloco.id}>
 					<div className="painel-projeto">
 						<div className="painel-projeto__topo">
 							<span
@@ -187,13 +209,18 @@ export function ProjetoRota({ id }: { id: string }) {
 								<IconePasta size={18} />
 							</span>
 							<div className="painel-projeto__barra" aria-hidden="true">
-								<span style={{ width: `${progresso}%`, background: cor.hex }} />
+								<span
+									style={{
+										['--valor' as string]: String(progresso / 100),
+										background: cor.hex,
+									}}
+								/>
 							</div>
 							<span className="painel-projeto__pct tabular">{progresso}%</span>
 						</div>
 
-						{projeto.descricao ? (
-							<p className="painel-projeto__descricao">{projeto.descricao}</p>
+						{projetoAtual.descricao ? (
+							<p className="painel-projeto__descricao">{projetoAtual.descricao}</p>
 						) : null}
 
 						{/* Indicadores numa linha só: o que a lista de tarefas não conta
@@ -227,24 +254,27 @@ export function ProjetoRota({ id }: { id: string }) {
 									<span className="indicador__rotulo">marcos</span>
 								</span>
 							) : null}
-							{projeto.prazo ? (
+							{projetoAtual.prazo ? (
 								<span className="indicador indicador--prazo">
 									<IconeCalendario size={14} />
-									<span className="indicador__rotulo">{textoDaData(projeto.prazo)}</span>
+									<span className="indicador__rotulo">{textoDaData(projetoAtual.prazo)}</span>
 								</span>
 							) : null}
 						</div>
 					</div>
 				</div>
+			)
+		}
 
-				{/* ------------------------------------------------------- marcos */}
-				<section className="secao" aria-labelledby="secao-marcos">
+		if (bloco.tipo === 'marcos') {
+			return (
+				<section className="secao" aria-labelledby={`secao-marcos-${bloco.id}`} key={bloco.id}>
 					<div className="secao-cabecalho">
-						<h2 className="secao-titulo" id="secao-marcos">
+						<h2 className="secao-titulo" id={`secao-marcos-${bloco.id}`}>
 							<span className="secao-titulo__icone" aria-hidden="true">
 								<IconeBandeira size={17} />
 							</span>
-							Marcos
+							{titulo}
 							{marcos.length > 0 ? (
 								<span className="secao-titulo__contagem">
 									{marcosFeitos}/{marcos.length}
@@ -315,18 +345,15 @@ export function ProjetoRota({ id }: { id: string }) {
 						</ul>
 					)}
 				</section>
+			)
+		}
 
-				<EditarMarco
-					projetoId={id}
-					marco={editandoMarco}
-					onFechar={() => setEditandoMarco(null)}
-				/>
-
-				{/* -------------------------------------------------------- tarefas */}
-				<section className="secao" aria-labelledby="secao-tarefas-lista">
+		if (bloco.tipo === 'tarefas') {
+			return (
+				<section className="secao" aria-labelledby={`secao-tarefas-${bloco.id}`} key={bloco.id}>
 					<div className="secao-cabecalho">
-						<h2 className="secao-titulo" id="secao-tarefas-lista">
-							Tarefas
+						<h2 className="secao-titulo" id={`secao-tarefas-${bloco.id}`}>
+							{titulo}
 							<span className="secao-titulo__contagem">
 								{concluidas.length}/{total}
 							</span>
@@ -364,6 +391,7 @@ export function ProjetoRota({ id }: { id: string }) {
 									key={tarefa.id}
 									tarefa={tarefa}
 									mostrarData
+									atrasada={estaAtrasada(tarefa, hoje)}
 									onEditar={setEditando}
 									onExcluir={setExcluindoTarefa}
 								/>
@@ -371,22 +399,30 @@ export function ProjetoRota({ id }: { id: string }) {
 						</ul>
 					)}
 				</section>
+			)
+		}
 
-				{/* ------------------------------------------------------ anotações */}
-				<SecaoDeAnotacoes projectId={id} />
+		if (bloco.tipo === 'anotacoes') {
+			return <SecaoDeAnotacoes key={bloco.id} projectId={id} titulo={titulo} />
+		}
 
-				{/* --------------------------------------------------------- resumo */}
-				<section className="secao" aria-labelledby="secao-notas">
+		if (bloco.tipo === 'texto') {
+			return <TextoDoBlocoDoProjeto key={bloco.id} projetoId={id} bloco={bloco} titulo={titulo} />
+		}
+
+		if (bloco.tipo === 'resumo') {
+			return (
+				<section className="secao" aria-labelledby={`secao-notas-${bloco.id}`} key={bloco.id}>
 					<div className="secao-cabecalho">
-						<h2 className="secao-titulo" id="secao-notas">
+						<h2 className="secao-titulo" id={`secao-notas-${bloco.id}`}>
 							<span className="secao-titulo__icone" aria-hidden="true">
 								<IconeDescricao size={17} />
 							</span>
-							Resumo do projeto
+							{titulo}
 						</h2>
 						{/* Salvar fica no cabeçalho, ao lado do título. Antes era uma
-						    linha própria abaixo da caixa: os 40 px do botão empurravam
-						    o quadro de páginas para longe das notas. */}
+						    linha própria abaixo da caixa, e os 40 px do botão
+						    empurravam o conteúdo para longe das notas. */}
 						{notasSalvas ? (
 							<span className="secao-acao" role="status" aria-live="polite">
 								<IconeConcluido size={16} />
@@ -410,11 +446,88 @@ export function ProjetoRota({ id }: { id: string }) {
 					/>
 					<p className="nota">
 						Um parágrafo de contexto que sempre aparece aqui. Para anotar o dia a dia, use
-						as anotações acima — elas guardam data e hora.
+						as anotações — elas guardam data e hora.
 					</p>
 				</section>
+			)
+		}
+	}
 
-							</div>
+	return (
+		<div className="tela" style={estiloCor(projeto.color)}>
+			<Topo
+				titulo={projeto.name}
+				sobre={
+					projeto.etapa ??
+					(projeto.archived
+						? 'Projeto arquivado'
+						: [projeto.categoria, ESTADO_DO_PROJETO[projeto.status ?? 'ativo'].rotulo]
+								.filter(Boolean)
+								.join(' · '))
+				}
+				antes={
+					<Link route={{ name: 'projetos' }} className="botao-icone" ariaLabel="Voltar">
+						<IconeExpandir size={22} style={{ transform: 'rotate(90deg)' }} />
+					</Link>
+				}
+				acoes={
+					<>
+						{/* Montar: mesma ação do "Ajustar" no Início. Antes a ordem
+						    das seções era fixa e não havia como esconder nenhuma. */}
+						<button
+							type="button"
+							className="botao-icone"
+							aria-label="Montar o projeto"
+							title="Montar o projeto"
+							onClick={() => setMontandoBlocos(true)}
+						>
+							<IconeAjuste size={22} />
+						</button>
+						<button
+							type="button"
+							className="botao-icone"
+							aria-label="Editar projeto"
+							onClick={() => setEditandoProjeto(true)}
+						>
+							<IconeEditar size={22} />
+						</button>
+						<button
+							type="button"
+							className="botao-icone"
+							aria-label="Excluir projeto"
+							onClick={() => setExcluindo(true)}
+						>
+							<IconeApagar size={22} />
+						</button>
+					</>
+				}
+			/>
+
+			<div className="conteudo">
+				{blocos.length === 0 ? (
+					<div className="secao">
+						<div className="cartao cartao--vazio">
+							<p>Todos os blocos deste projeto estão ocultos.</p>
+							<button
+								type="button"
+								className="botao botao--primario"
+								onClick={() => setMontandoBlocos(true)}
+							>
+								<IconeAjuste size={20} />
+								Montar o projeto
+							</button>
+						</div>
+					</div>
+				) : (
+					blocos.map((bloco) => renderizarBloco(bloco))
+				)}
+			</div>
+
+			<EditarMarco
+				projetoId={id}
+				marco={editandoMarco}
+				onFechar={() => setEditandoMarco(null)}
+			/>
 
 			<EditarTarefa
 				tarefa={editando}
@@ -424,13 +537,17 @@ export function ProjetoRota({ id }: { id: string }) {
 				etiquetasConhecidas={[...new Set((tarefas ?? []).flatMap((t) => t.tags ?? []))].sort()}
 			/>
 
-			<ConfirmarExclusaoTarefa
-				tarefa={excluindoTarefa}
+			<ExcluirComDesfazer
+				alvo={excluindoTarefa ? { id: excluindoTarefa.id, titulo: excluindoTarefa.title } : null}
+				titulo="Excluir tarefa"
+				descricao={(alvo) => (
+					<>
+						Excluir <strong>{alvo.titulo}</strong>? Ela sai de todas as visões deste aparelho.
+					</>
+				)}
 				onFechar={() => setExcluindoTarefa(null)}
-				onExcluir={async (alvo) => {
-					await softDeleteTask(alvo.id)
-					setExcluindoTarefa(null)
-				}}
+				onExcluir={(alvo) => softDeleteTask(alvo.id)}
+				onDesfazer={(alvo) => restaurarTask(alvo.id)}
 			/>
 
 			{/* Criação em FOLHA, não em formulário inline.
@@ -526,18 +643,27 @@ export function ProjetoRota({ id }: { id: string }) {
 				</form>
 			</Folha>
 
-
 			<EditarProjeto
 				projeto={projeto}
 				aberto={editandoProjeto}
 				onFechar={() => setEditandoProjeto(false)}
+				onExcluido={(alvo) => void excluir(alvo)}
 			/>
 
+			<EditorBlocosDoProjeto
+				projeto={projeto}
+				aberto={montandoBlocos}
+				onFechar={() => setMontandoBlocos(false)}
+			/>
+
+			{/* O texto é o mesmo de `EditarProjeto` e descreve o que
+			    `softDeleteProject` faz de fato: agora as anotações também saem,
+			    e o desfazer restaura o projeto inteiro. */}
 			<Folha titulo="Excluir projeto" aberta={excluindo} onFechar={() => setExcluindo(false)}>
 				<div className="formulario">
 					<p className="nota">
-						Excluir <strong>{projeto.name}</strong> remove as tarefas, as páginas e os eventos que estão
-						nela. Não dá para desfazer.
+						Excluir <strong>{projeto.name}</strong> remove as tarefas, os marcos, as
+						anotações e os eventos que estão nela. Dá para desfazer logo depois.
 					</p>
 					<div className="formulario__acoes">
 						<button type="button" className="botao" onClick={() => setExcluindo(false)}>
@@ -547,8 +673,8 @@ export function ProjetoRota({ id }: { id: string }) {
 							type="button"
 							className="botao botao--perigo-solido"
 							onClick={() => {
-								void softDeleteProject(projeto.id)
-								navigate({ name: 'projetos' })
+								setExcluindo(false)
+								void excluir(projeto)
 							}}
 						>
 							<IconeApagar size={18} />
@@ -557,8 +683,23 @@ export function ProjetoRota({ id }: { id: string }) {
 					</div>
 				</div>
 			</Folha>
+
+			{desfazerExclusao.pendente ? (
+				<FaixaDesfazer
+					texto={desfazerExclusao.pendente.texto}
+					onDesfazer={desfazerExclusao.desfazer}
+					onFechar={desfazerExclusao.fechar}
+				/>
+			) : null}
 		</div>
 	)
+}
+
+/** Estado como selo, igual ao usado na central. */
+const ESTADO_DO_PROJETO: Record<NonNullable<Project['status']>, { rotulo: string }> = {
+	ativo: { rotulo: 'Ativo' },
+	pausado: { rotulo: 'Pausado' },
+	concluido: { rotulo: 'Concluído' },
 }
 
 /**
@@ -638,134 +779,3 @@ function EditarMarco({
 	)
 }
 
-/** Edição do projeto: nome, entrega, prazo, etapa, estado e cor. */
-function EditarProjeto({
-	projeto,
-	aberto,
-	onFechar,
-}: {
-	projeto: Project
-	aberto: boolean
-	onFechar: () => void
-}) {
-	const [nome, setNome] = useState(projeto.name)
-	const [descricao, setDescricao] = useState(projeto.descricao ?? '')
-	const [prazo, setPrazo] = useState(projeto.prazo ?? '')
-	const [etapa, setEtapa] = useState(projeto.etapa ?? '')
-	const [status, setStatus] = useState<NonNullable<Project['status']>>(projeto.status ?? 'ativo')
-
-	useEffect(() => {
-		if (!aberto) return
-		setNome(projeto.name)
-		setDescricao(projeto.descricao ?? '')
-		setPrazo(projeto.prazo ?? '')
-		setEtapa(projeto.etapa ?? '')
-		setStatus(projeto.status ?? 'ativo')
-	}, [aberto, projeto])
-
-	return (
-		<Folha titulo="Editar projeto" aberta={aberto} onFechar={onFechar}>
-			<form
-				className="formulario"
-				onSubmit={(evento) => {
-					evento.preventDefault()
-					if (!nome.trim()) return
-					void updateProject(projeto.id, {
-						name: nome.trim(),
-						descricao: descricao.trim() || null,
-						prazo: prazo || null,
-						etapa: etapa.trim() || null,
-						status,
-					})
-					onFechar()
-				}}
-			>
-				<div>
-					<label className="campo-rotulo" htmlFor="projeto-ed-nome">
-						Nome
-					</label>
-					<input
-						id="projeto-ed-nome"
-						data-foco-inicial
-						className="campo"
-						value={nome}
-						onChange={(evento) => setNome(evento.target.value)}
-						maxLength={80}
-					/>
-				</div>
-
-				<div>
-					<label className="campo-rotulo" htmlFor="projeto-ed-desc">
-						O que este projeto entrega
-					</label>
-					<textarea
-						id="projeto-ed-desc"
-						className="campo campo--area"
-						value={descricao}
-						onChange={(evento) => setDescricao(evento.target.value)}
-						rows={2}
-						maxLength={200}
-					/>
-				</div>
-
-				<div>
-					<label className="campo-rotulo" htmlFor="projeto-ed-prazo">
-						Prazo
-					</label>
-					<input
-						id="projeto-ed-prazo"
-						type="date"
-						className="campo"
-						value={prazo}
-						onChange={(evento) => setPrazo(evento.target.value)}
-					/>
-				</div>
-
-				<div>
-					<label className="campo-rotulo" htmlFor="projeto-ed-etapa">
-						Etapa atual
-					</label>
-					<input
-						id="projeto-ed-etapa"
-						className="campo"
-						value={etapa}
-						onChange={(evento) => setEtapa(evento.target.value)}
-						placeholder="Ex.: Aguardando aprovação"
-						maxLength={60}
-					/>
-				</div>
-
-				<div>
-					<span className="campo-rotulo">Estado</span>
-					<div className="segmentado" role="group" aria-label="Estado do projeto">
-						{([
-							{ v: 'ativo', r: 'Ativo' },
-							{ v: 'pausado', r: 'Pausado' },
-							{ v: 'concluido', r: 'Concluído' },
-						] as const).map((op) => (
-							<button
-								key={op.v}
-								type="button"
-								className="segmentado__item"
-								aria-pressed={status === op.v}
-								onClick={() => setStatus(op.v)}
-							>
-								{op.v === 'concluido' ? <IconeRaio size={14} /> : null}
-								{op.r}
-							</button>
-						))}
-					</div>
-				</div>
-
-				<div className="formulario__acoes">
-					<button type="button" className="botao" onClick={onFechar}>
-						Cancelar
-					</button>
-					<button type="submit" className="botao botao--primario" disabled={!nome.trim()}>
-						Salvar
-					</button>
-				</div>
-			</form>
-		</Folha>
-	)
-}

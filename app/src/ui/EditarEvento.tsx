@@ -2,42 +2,55 @@ import { useEffect, useState } from 'react'
 import type { Evento } from '@/db/db'
 import { atualizarEvento, excluirEvento } from '@/db/eventos'
 import { Folha } from '@/ui/Folha'
-import { PALETA, corDoIndice } from '@/ui/paleta'
+import { EscolherCor } from '@/ui/EscolherCor'
 import { IconeApagar } from '@/ui/icones'
+import { chaveDoDia } from '@/lib/date'
+import { tentar } from '@/lib/escrita'
 
 /**
  * Editor de evento (título, dia, horas, cor) com exclusão.
  *
  * Nasce da auditoria: `atualizarEvento`/`excluirEvento` existiam no
- * repositório, mas nenhuma tela chamava — evento criado com hora errada
- * ficava permanente. Ocorrências de repetição chegam com id sintético
- * (`id@data`); aqui se edita/exclui o evento base.
+ * repositório, mas só a Agenda chamava. O evento aparece no Início, no painel
+ * do dia, na busca e na linha do dia — e em todos esses lugares a linha não era
+ * clicável. Aqui é UM editor para todos eles: tocar no evento abre esta folha,
+ * que edita e exclui com confirmação.
+ *
+ * Ocorrências de repetição chegam com id sintético (`id@data`); aqui se
+ * edita/exclui o evento base, e o texto da confirmação avisa disso.
  */
 export function EditarEvento({
 	evento,
 	onFechar,
+	onExcluido,
 }: {
 	/** Evento (aceita id sintático de ocorrência expandida). */
 	evento: Evento | null
 	onFechar: () => void
+	/** Chamado depois de excluir, para a tela mostrar o desfazer. */
+	onExcluido?: (evento: Evento) => void
 }) {
 	const [titulo, setTitulo] = useState('')
 	const [dia, setDia] = useState('')
 	const [inicio, setInicio] = useState('')
 	const [fim, setFim] = useState('')
-	const [cor, setCor] = useState(0)
+	const [local, setLocal] = useState('')
+	const [notas, setNotas] = useState('')
+	const [cor, setCor] = useState<number | string>(0)
 	const [confirmando, setConfirmando] = useState(false)
 	const [salvando, setSalvando] = useState(false)
+	const [erro, setErro] = useState<string | null>(null)
 
 	useEffect(() => {
 		if (!evento) return
 		setTitulo(evento.title)
 		setCor(evento.cor ?? 0)
+		setLocal(evento.local ?? '')
+		setNotas(evento.notes ?? '')
 		setConfirmando(false)
+		setErro(null)
+		setDia(chaveDoDia(new Date(evento.startAt)))
 
-		const começo = new Date(evento.startAt)
-		const chave = `${começo.getFullYear()}-${String(começo.getMonth() + 1).padStart(2, '0')}-${String(começo.getDate()).padStart(2, '0')}`
-		setDia(chave)
 		const hhmm = (ms: number): string =>
 			`${String(new Date(ms).getHours()).padStart(2, '0')}:${String(new Date(ms).getMinutes()).padStart(2, '0')}`
 		setInicio(evento.diaInteiro ? '' : hhmm(evento.startAt))
@@ -47,6 +60,18 @@ export function EditarEvento({
 	if (!evento) return null
 
 	const idBase = evento.id.split('@')[0]!
+
+	/** Exclui com confirmação; só oferece o desfazer se a escrita passou. */
+	async function excluir(): Promise<void> {
+		const resultado = await tentar(() => excluirEvento(idBase))
+		if (!resultado.ok) {
+			setErro(resultado.erro ?? 'Não foi possível excluir o evento.')
+			return
+		}
+		setErro(null)
+		onFechar()
+		onExcluido?.(evento!)
+	}
 
 	async function salvar(): Promise<void> {
 		const texto = titulo.trim()
@@ -72,8 +97,13 @@ export function EditarEvento({
 				endAt: fimMs,
 				diaInteiro: !temHora,
 				cor,
+				local: local.trim() || null,
+				notes: notas.trim() || null,
 			})
 			onFechar()
+		} catch (causa) {
+			// Antes a folha fechava mesmo quando a escrita falhava.
+			setErro(causa instanceof Error ? causa.message : 'Não foi possível salvar o evento.')
 		} finally {
 			setSalvando(false)
 		}
@@ -91,18 +121,16 @@ export function EditarEvento({
 					<p className="nota">
 						Excluir <strong>{evento.title}</strong>? Se o evento se repete, a regra inteira sai da agenda.
 					</p>
+					{erro ? (
+						<p className="erro" role="alert">
+							{erro}
+						</p>
+					) : null}
 					<div className="formulario__acoes">
 						<button type="button" className="botao" onClick={() => setConfirmando(false)}>
 							Manter
 						</button>
-						<button
-							type="button"
-							className="botao botao--perigo-solido"
-							onClick={() => {
-								void excluirEvento(idBase)
-								onFechar()
-							}}
-						>
+						<button type="button" className="botao botao--perigo-solido" onClick={() => void excluir()}>
 							Excluir
 						</button>
 					</div>
@@ -165,21 +193,44 @@ export function EditarEvento({
 					</div>
 
 					<div>
-						<span className="campo-rotulo">Cor</span>
-						<div className="amostra-cores" role="group" aria-label="Cor do evento">
-							{PALETA.slice(0, 7).map((item) => (
-								<button
-									key={item.indice}
-									type="button"
-									className="amostra-cor"
-									style={{ background: corDoIndice(item.indice).hex }}
-									aria-label={item.rotulo}
-									aria-pressed={cor === item.indice}
-									onClick={() => setCor(item.indice)}
-								/>
-							))}
-						</div>
+						<label className="campo-rotulo" htmlFor="evento-local">
+							Local (opcional)
+						</label>
+						<input
+							id="evento-local"
+							className="campo"
+							value={local}
+							onChange={(e) => setLocal(e.target.value)}
+							placeholder="Ex.: Consultório, sala 3"
+							maxLength={120}
+						/>
 					</div>
+
+					<div>
+						<label className="campo-rotulo" htmlFor="evento-notas">
+							Notas (opcional)
+						</label>
+						<textarea
+							id="evento-notas"
+							className="campo campo--area"
+							value={notas}
+							onChange={(e) => setNotas(e.target.value)}
+							rows={2}
+							maxLength={400}
+							placeholder="O que levar, com quem falar, o que confirmar."
+						/>
+					</div>
+
+					<div>
+						<span className="campo-rotulo">Cor</span>
+						<EscolherCor valor={cor} onMudar={setCor} rotulo="Cor do evento" />
+					</div>
+
+					{erro ? (
+						<p className="erro" role="alert">
+							{erro}
+						</p>
+					) : null}
 
 					<div className="formulario__acoes" style={{ justifyContent: 'space-between' }}>
 						<button type="button" className="botao botao--perigo" onClick={() => setConfirmando(true)}>

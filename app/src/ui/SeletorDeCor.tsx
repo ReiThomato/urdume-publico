@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Folha } from '@/ui/Folha'
 import { IconeAdicionar } from '@/ui/icones'
+import { LIMITE_RECENTES, PALETA, ehHex, normalizarHex } from '@/ui/paleta'
+import { limparRecentes, lerRecentes, registrarCorRecente } from '@/lib/cores-recentes'
 
 /* --------------------------------------------------------------------------
    Conversões hex ⇄ HSL
@@ -62,41 +64,54 @@ function hslParaHex({ h, s, l }: Hsl): string {
 	return `#${canal(r)}${canal(g)}${canal(b)}`
 }
 
-function hexValido(texto: string): boolean {
-	return /^#?[0-9a-f]{6}$/i.test(texto.trim())
-}
-
 /* --------------------------------------------------------------------------
    Seletor
    -------------------------------------------------------------------------- */
 
-export interface SeletorDeCorProps {
+interface SeletorDeCorProps {
 	aberto: boolean
 	onFechar: () => void
-	/** Cor-semente atual, para abrir o seletor já nela. */
+	/** Cor atual, para abrir o seletor já nela. Pode ser índice, hex ou vazio. */
 	corAtual: string
 	onEscolher: (hex: string) => void
+	/** Título da folha. Muda conforme o que se está colorindo. */
+	titulo?: string
 }
 
 /**
- * Seletor de cor-semente para o tema.
+ * Seletor de cor.
  *
  * Nasceu de um problema real: o `<input type="color">` não abre no WebView do
  * Android, então "escolher outra cor" simplesmente não funcionava. Aqui os três
  * canais (matiz, saturação e brilho) são controles próprios — funcionam em
  * qualquer ambiente — e o hex continua editável para quem já tem o código.
+ *
+ * ## As recentes
+ *
+ * As últimas quatro cores escolhidas à mão ficam guardadas e aparecem no topo,
+ * para reuso. Sem elas, a mesma cor personalizada era reescolhida no seletor a
+ * cada projeto novo.
  */
-export function SeletorDeCor({ aberto, onFechar, corAtual, onEscolher }: SeletorDeCorProps) {
+export function SeletorDeCor({
+	aberto,
+	onFechar,
+	corAtual,
+	onEscolher,
+	titulo = 'Nova cor',
+}: SeletorDeCorProps) {
 	const [hsl, setHsl] = useState<Hsl>(() => hexParaHsl(corAtual))
 	const [hexDigitado, setHexDigitado] = useState(corAtual)
 	const [hexTravado, setHexTravado] = useState(false)
+	const [recentes, setRecentes] = useState<string[]>([])
 
 	// Ao abrir, parte sempre da cor em uso.
 	useEffect(() => {
 		if (!aberto) return
-		setHsl(hexParaHsl(corAtual))
-		setHexDigitado(corAtual)
+		const base = normalizarHex(corAtual) ?? '#8f4c35'
+		setHsl(hexParaHsl(base))
+		setHexDigitado(base)
 		setHexTravado(false)
+		void lerRecentes().then(setRecentes)
 	}, [aberto, corAtual])
 
 	const hex = useMemo(() => hslParaHex(hsl), [hsl])
@@ -113,15 +128,72 @@ export function SeletorDeCor({ aberto, onFechar, corAtual, onEscolher }: Seletor
 
 	function aplicarHex(texto: string): void {
 		setHexDigitado(texto)
-		const normalizado = texto.trim().startsWith('#') ? texto.trim() : `#${texto.trim()}`
-		if (hexValido(normalizado)) setHsl(hexParaHsl(normalizado))
+		const normalizado = normalizarHex(texto)
+		if (normalizado) setHsl(hexParaHsl(normalizado))
+	}
+	function usar(valor: string): void {
+		const normalizado = normalizarHex(valor)
+		if (!normalizado) return
+		void registrarCorRecente(normalizado).then(setRecentes)
+		onEscolher(normalizado)
+		onFechar()
 	}
 
 	return (
-		<Folha titulo="Nova cor do tema" aberta={aberto} onFechar={onFechar}>
+		<Folha titulo={titulo} aberta={aberto} onFechar={onFechar}>
 			<div className="seletor-cor">
 				<div className="seletor-cor__mostra" style={{ background: hex }} aria-hidden="true">
 					<span className="seletor-cor__hex-grande">{hex.toUpperCase()}</span>
+				</div>
+
+				{/*
+				 * Recentes: as últimas quatro cores escolhidas à mão.
+				 * Ficam antes da paleta porque a paleta é fixa e já está abaixo;
+				 * o que o usuário acabou de criar é o palpite mais útil.
+				 */}
+				{recentes.length > 0 ? (
+					<div>
+						<span className="campo-rotulo">Recentes</span>
+						<div className="amostra-cores" style={{ padding: '4px 0 0' }} role="group" aria-label="Cores recentes">
+							{recentes.slice(0, LIMITE_RECENTES).map((cor) => (
+								<button
+									key={cor}
+									type="button"
+									className="amostra-cor"
+									style={{ background: cor }}
+									aria-label={`Usar ${cor}`}
+									aria-pressed={cor === normalizarHex(hexDigitado)}
+									onClick={() => usar(cor)}
+								/>
+							))}
+							<button
+								type="button"
+								className="botao-icone botao-icone--pequeno"
+								aria-label="Limpar cores recentes"
+								title="Limpar recentes"
+								onClick={() => void limparRecentes().then(() => setRecentes([]))}
+							>
+								×
+							</button>
+						</div>
+					</div>
+				) : null}
+
+				<div>
+					<span className="campo-rotulo">Paleta</span>
+					<div className="amostra-cores" style={{ padding: '4px 0 0' }} role="group" aria-label="Paleta de cores">
+						{PALETA.map((cor) => (
+							<button
+								key={cor.hex}
+								type="button"
+								className="amostra-cor"
+								style={{ background: cor.hex }}
+								aria-label={cor.rotulo}
+								aria-pressed={cor.hex === normalizarHex(hexDigitado)}
+								onClick={() => usar(cor.hex)}
+							/>
+						))}
+					</div>
 				</div>
 
 				<label className="seletor-cor__canal">
@@ -175,7 +247,6 @@ export function SeletorDeCor({ aberto, onFechar, corAtual, onEscolher }: Seletor
 					</label>
 					<input
 						id="cor-hex"
-						data-foco-inicial
 						className="campo"
 						value={hexDigitado}
 						onChange={(evento) => aplicarHex(evento.target.value)}
@@ -187,7 +258,7 @@ export function SeletorDeCor({ aberto, onFechar, corAtual, onEscolher }: Seletor
 						spellCheck={false}
 						maxLength={7}
 					/>
-					{!hexValido(hexDigitado) ? (
+					{!ehHex(hexDigitado) ? (
 						<p className="nota">Use seis dígitos, por exemplo #3366FF.</p>
 					) : null}
 				</div>
@@ -199,11 +270,17 @@ export function SeletorDeCor({ aberto, onFechar, corAtual, onEscolher }: Seletor
 					<button
 						type="button"
 						className="botao botao--primario"
-						disabled={!hexValido(hexDigitado)}
-						onClick={() => {
-							onEscolher(hex)
-							onFechar()
-						}}
+						disabled={!ehHex(hexDigitado)}
+						/*
+						 * Aplica o hex DIGITADO, não o do roundtrip HSL.
+						 *
+						 * Antes era `usar(hex)`, onde `hex` vinha de HSL→hex. HSL
+						 * perde precisão na ida e na volta, então uma cor fora do
+						 * gamut ou um cinza saíam levemente diferentes do que o
+						 * usuário digitou — a queixa de "a cor não sai na
+						 * tonalidade escolhida". O valor digitado é a verdade.
+						 */
+						onClick={() => usar(hexDigitado)}
 					>
 						Usar esta cor
 					</button>
@@ -213,12 +290,22 @@ export function SeletorDeCor({ aberto, onFechar, corAtual, onEscolher }: Seletor
 	)
 }
 
-/** Botão que abre o seletor — o "+" que faltava na paleta. */
+/**
+ * Botão que abre o seletor.
+ *
+ * Só o símbolo. O rótulo "Nova" foi removido a pedido: entre doze amostras
+ * redondas, um quadrado com a palavra dentro quebrava o alinhamento da linha.
+ */
 export function BotaoNovaCor({ onClick }: { onClick: () => void }) {
 	return (
-		<button type="button" className="amostra-cor amostra-cor--nova" onClick={onClick} title="Adicionar uma cor">
+		<button
+			type="button"
+			className="amostra-cor amostra-cor--nova"
+			onClick={onClick}
+			aria-label="Escolher outra cor"
+			title="Outra cor"
+		>
 			<IconeAdicionar size={20} />
-			<span className="amostra-cor__rotulo">Nova</span>
 		</button>
 	)
 }

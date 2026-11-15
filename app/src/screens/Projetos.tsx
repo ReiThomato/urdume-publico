@@ -1,15 +1,20 @@
 import { useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/db'
 import type { Priority, Project, Task } from '@/db/db'
-import { createProject, softDeleteProject, updateProject, useProjects } from '@/db/repo'
+import { restaurarProject, useProjects } from '@/db/repo'
 import { useCategorias } from '@/db/repo'
 import { ordenarResumos, ROTULO_DA_ORDEM } from '@/lib/projetos'
 import type { OrdemDeProjetos } from '@/lib/projetos'
 import { Link } from '@/app/router'
-import { Folha } from '@/ui/Folha'
 import { Topo } from '@/ui/AppShell'
-import { PALETA, corDoIndice } from '@/ui/paleta'
+import { CriarProjeto } from '@/ui/CriarProjeto'
+import { EditarProjeto } from '@/ui/EditarProjeto'
+import { FaixaDesfazer, useDesfazerExclusao } from '@/ui/ExcluirComDesfazer'
+import { corDe, tintaSobre } from '@/ui/paleta'
+import { estiloDaFaixa } from '@/ui/cores'
+import { escrever } from '@/lib/falhas'
 import {
 	ROTULO_DA_FAIXA,
 	faixaDoProjeto,
@@ -19,7 +24,7 @@ import {
 	type FaixaDeProjeto,
 	type ResumoDoProjeto,
 } from '@/lib/projetos'
-import { IconeAdicionar, IconeBandeira, IconeEditar, IconePasta } from '@/ui/icones'
+import { IconeAdicionar, IconeBandeira, IconeEditar, IconeFechar, IconePasta } from '@/ui/icones'
 
 /**
  * Projetos — a central de gerenciamento.
@@ -49,6 +54,14 @@ const ESTADOS: Record<NonNullable<Project['status']>, { rotulo: string; classe: 
 	concluido: { rotulo: 'Concluído', classe: 'selo--concluido' },
 }
 
+/** Rótulo da prioridade, no mesmo vocabulário das tarefas. */
+const PRIORIDADES: Record<Priority, { rotulo: string }> = {
+	0: { rotulo: 'Sem prioridade' },
+	1: { rotulo: 'Baixa' },
+	2: { rotulo: 'Média' },
+	3: { rotulo: 'Alta' },
+}
+
 function useTodasAsTarefas(): Task[] | undefined {
 	return useLiveQuery(async () => {
 		const todas = await db.tasks.toArray()
@@ -56,303 +69,234 @@ function useTodasAsTarefas(): Task[] | undefined {
 	}, [])
 }
 
+/**
+ * Anotações por projeto, numa consulta só.
+ *
+ * O cartão da central passou a mostrar o que existe DENTRO da pasta — quantas
+ * anotações — porque "projeto" sem isso é só um nome com uma barra de
+ * progresso. Fazer uma consulta por cartão seria caro numa carteira de vinte
+ * projetos; aqui é uma leitura só.
+ */
+interface AnexosDoProjeto {
+	anotacoes: number
+}
+
+function useAnexosDosProjetos(): Map<string, AnexosDoProjeto> | undefined {
+	return useLiveQuery(async () => {
+		const notas = await db.projectNotes.toArray()
+		const mapa = new Map<string, AnexosDoProjeto>()
+
+		const obter = (id: string): AnexosDoProjeto => {
+			const atual = mapa.get(id) ?? { anotacoes: 0 }
+			mapa.set(id, atual)
+			return atual
+		}
+
+		for (const nota of notas) {
+			if (nota.deletedAt) continue
+			obter(nota.projectId).anotacoes += 1
+		}
+
+		return mapa
+	}, [])
+}
+
 function CartaoDeProjeto({
 	resumo,
+	anexos,
 	onEditar,
 }: {
 	resumo: ResumoDoProjeto
+	anexos?: AnexosDoProjeto
 	onEditar: (projeto: Project) => void
 }) {
 	const { projeto } = resumo
-	const cor = corDoIndice(Number(projeto.color ?? 0)).hex
+	const cor = corDe(projeto.color, projeto.id).hex
 	const prazo = textoDoPrazo(resumo)
 	const estado = ESTADOS[projeto.status ?? 'ativo']
+	const dataDoPrazo = textoDaData(projeto.prazo)
 
+	/*
+	 * A pasta inteira é o alvo do toque.
+	 *
+	 * Antes só o título e a faixa de progresso eram links; tocar na borda, no
+	 * respiro ou na etiqueta de categoria não abria nada. O dono do app pediu
+	 * que a pasta abrisse o projeto em qualquer ponto — e a etiqueta de
+	 * categoria, que era um botão de filtro dentro do cartão, virou texto:
+	 * um alvo dentro de outro alvo confunde o toque e rouba o gesto de abrir.
+	 */
 	return (
-		<div className="projeto-cartao">
-			{/* O cartão em si é um link; o lápis é um botão fora dele, para não
-			    aninhar botão dentro de âncora (o toque no lápis abriria o projeto). */}
-			<div className="projeto-cartao__topo">
-				<span className="projeto-cartao__marca" style={{ background: cor }} aria-hidden="true" />
-				<Link route={{ name: 'projeto', id: projeto.id }} className="projeto-cartao__titulo-area">
-					<h2 className="projeto-cartao__titulo">{projeto.name}</h2>
-					{projeto.etapa ? <p className="projeto-cartao__etapa">{projeto.etapa}</p> : null}
-				</Link>
-				<span className={`selo ${estado.classe}`}>{estado.rotulo}</span>
-				<button
-					type="button"
-					className="botao-icone botao-icone--pequeno"
-					aria-label={`Editar ${projeto.name}`}
-					title="Editar projeto"
-					onClick={() => onEditar(projeto)}
-				>
-					<IconeEditar size={17} />
-				</button>
-			</div>
-
-			{projeto.descricao ? <p className="projeto-cartao__descricao">{projeto.descricao}</p> : null}
-
-			<Link route={{ name: 'projeto', id: projeto.id }} className="projeto-cartao__corpo">
-				<div className="projeto-cartao__barra" aria-hidden="true">
-					<span style={{ width: `${resumo.progresso}%`, background: cor }} />
-				</div>
-
-				<div className="projeto-cartao__rodape">
-					<span className="projeto-cartao__contagem">
-						{resumo.concluidas}/{resumo.total} · {resumo.progresso}%
+		<div className="projeto-cartao-area">
+			<Link
+				route={{ name: 'projeto', id: projeto.id }}
+				className="projeto-cartao"
+				style={
+					{
+						'--cor-cat': cor,
+						'--tinta-da-cor': tintaSobre(cor),
+						// A faixa do topo é a cor escurecida; a tinta dela é calculada
+						// sobre a cor EFETIVA, não branca fixa (ver `estiloDaFaixa`).
+						...estiloDaFaixa(cor),
+					} as CSSProperties
+				}
+				ariaLabel={`Abrir ${projeto.name}`}
+			>
+				{/*
+				 * Duas faixas, como nas referências.
+				 *
+				 * A primeira é a "aba da pasta": fundo escuro, o ícone e o número
+				 * que importa. A segunda é o CORPO na cor cheia do projeto, com o
+				 * título. Antes a cor era misturada a 16% com a superfície —
+				 * qualquer cor virava um cinza rosado e a escolha do usuário
+				 * desaparecia. Cor de identificação tem de aparecer, não sugerir.
+				 */}
+				<span className="projeto-cartao__faixa">
+					<span className="projeto-cartao__aba">
+						<span className="projeto-cartao__aba-icone" aria-hidden="true">
+							<IconePasta size={19} />
+						</span>
+						<span className="projeto-cartao__aba-numero tabular">{resumo.abertas}</span>
+						<span className="projeto-cartao__aba-rotulo">
+							{resumo.abertas === 1 ? 'aberta' : 'abertas'}
+						</span>
 					</span>
-					{prazo ? (
-						<span
-							className="projeto-cartao__prazo"
-							data-vencido={resumo.prazoVencido ? 'sim' : 'nao'}
-						>
-							{prazo}
-						</span>
-					) : null}
-					{resumo.atrasadas > 0 ? (
-						<span className="projeto-cartao__atraso">
-							{resumo.atrasadas} {resumo.atrasadas === 1 ? 'atrasada' : 'atrasadas'}
-						</span>
-					) : null}
-					{resumo.marcos.length > 0 ? (
-						<span className="projeto-cartao__marcos">
-							<IconeBandeira size={13} />
-							{resumo.marcosFeitos}/{resumo.marcos.length}
-						</span>
-					) : null}
-					{resumo.proxima ? <span className="projeto-cartao__proxima">{resumo.proxima.title}</span> : null}
-				</div>
 
-				{/* Próxima entrega do projeto: responde "o que vem agora?" sem abrir
-				    o projeto. Só aparece quando existe marco pendente. */}
-				{resumo.proximoMarco ? (
-					<div className="projeto-cartao__proximo-marco">
-						<span className="projeto-cartao__proximo-rotulo">Próxima entrega</span>
-						<span className="projeto-cartao__proximo-titulo">{resumo.proximoMarco.titulo}</span>
-						{resumo.proximoMarco.data ? (
-							<span className="projeto-cartao__proximo-data">
-								{textoDaData(resumo.proximoMarco.data)}
+					{estado.rotulo !== 'Ativo' ? (
+						<span className={`selo ${estado.classe}`}>{estado.rotulo}</span>
+					) : null}
+				</span>
+
+				{/*
+				 * O corpo é o cartão inteiro: tocar em qualquer ponto dele abre o
+				 * projeto. O lápis fica fora, sobreposto, porque um botão dentro
+				 * de âncora é HTML inválido.
+				 */}
+				<span className="projeto-cartao__corpo">
+					<span className="projeto-cartao__cabecalho">
+						<span className="projeto-cartao__titulo">{projeto.name}</span>
+						{prazo ? (
+							<span
+								className="projeto-cartao__prazo"
+								data-vencido={resumo.prazoVencido ? 'sim' : 'nao'}
+							>
+								{prazo}
 							</span>
 						) : null}
-					</div>
-				) : null}
+					</span>
+
+					{projeto.etapa?.trim() ? (
+						<span className="projeto-cartao__etapa">{projeto.etapa}</span>
+					) : projeto.descricao ? (
+						<span className="projeto-cartao__etapa">{projeto.descricao}</span>
+					) : null}
+
+					{/* Faixa de bolinhas: uma tarefa, um ponto. Feitas ficam cheias. */}
+					{resumo.total > 0 ? (
+						<span
+							className="projeto-cartao__pontos"
+							role="img"
+							aria-label={`${resumo.concluidas} de ${resumo.total} tarefas concluídas`}
+						>
+							{pontosDeProgresso(resumo.concluidas, resumo.total).map((feito, indice) => (
+								<span
+									key={indice}
+									className="projeto-cartao__ponto"
+									data-feito={feito ? 'sim' : 'nao'}
+								/>
+							))}
+						</span>
+					) : null}
+
+					{/* Números do projeto, no formato do painel: rótulo, valor, meta.
+					    "Abertas" não entra: ele já é o número da aba, e repetir o
+					    mesmo dado em dois lugares gasta a atenção sem informar. */}
+					<span className="projeto-cartao__numeros">
+						<span className="projeto-cartao__numero">
+							<span className="projeto-cartao__numero-rotulo">Feitas</span>
+							<span className="projeto-cartao__numero-valor tabular">{resumo.concluidas}</span>
+						</span>
+						{resumo.atrasadas > 0 ? (
+							<span className="projeto-cartao__numero">
+								<span className="projeto-cartao__numero-rotulo">Atrasadas</span>
+								<span className="projeto-cartao__numero-valor tabular">{resumo.atrasadas}</span>
+							</span>
+						) : null}
+						{resumo.marcos.length > 0 ? (
+							<span className="projeto-cartao__numero">
+								<span className="projeto-cartao__numero-rotulo">Marcos</span>
+								<span className="projeto-cartao__numero-valor tabular">
+									{resumo.marcosFeitos}/{resumo.marcos.length}
+								</span>
+							</span>
+						) : null}
+						{anexos && anexos.anotacoes > 0 ? (
+							<span className="projeto-cartao__numero">
+								<span className="projeto-cartao__numero-rotulo">Notas</span>
+								<span className="projeto-cartao__numero-valor tabular">{anexos.anotacoes}</span>
+							</span>
+						) : null}
+					</span>
+
+					<span className="projeto-cartao__rodape">
+						{projeto.categoria?.trim() ? (
+							<span className="projeto-cartao__categoria">{projeto.categoria.trim()}</span>
+						) : null}
+						{(projeto.priority ?? 0) > 0 ? (
+							<span className="projeto-cartao__prioridade">
+								<IconeBandeira size={12} />
+								{PRIORIDADES[projeto.priority ?? 0].rotulo}
+							</span>
+						) : null}
+						{dataDoPrazo && prazo ? (
+							<span className="projeto-cartao__data">{dataDoPrazo}</span>
+						) : null}
+					</span>
+
+					{resumo.proximoMarco || resumo.proxima ? (
+						<span className="projeto-cartao__proximo">
+							<span className="projeto-cartao__proximo-rotulo">
+								{resumo.proximoMarco ? 'Próxima entrega' : 'Próximo passo'}
+							</span>
+							<span className="projeto-cartao__proximo-titulo">
+								{resumo.proximoMarco?.titulo ?? resumo.proxima?.title}
+							</span>
+							{resumo.proximoMarco?.data ? (
+								<span className="projeto-cartao__proximo-data">
+									{textoDaData(resumo.proximoMarco.data)}
+								</span>
+							) : null}
+						</span>
+					) : null}
+				</span>
 			</Link>
+
+			{/* O lápis fica FORA do link: botão dentro de âncora é HTML inválido
+			    e o toque no lápis abriria o projeto junto. */}
+			<button
+				type="button"
+				className="botao-icone botao-icone--pequeno projeto-cartao__editar"
+				aria-label={`Editar ${projeto.name}`}
+				title="Editar projeto"
+				onClick={() => onEditar(projeto)}
+			>
+				<IconeEditar size={17} />
+			</button>
 		</div>
 	)
 }
 
-/** Edição do projeto a partir da central, sem precisar entrar nele. */
-function EditarProjetoRapido({
-	projeto,
-	onFechar,
-}: {
-	projeto: Project | null
-	onFechar: () => void
-}) {
-	const [nome, setNome] = useState('')
-	const [etapa, setEtapa] = useState('')
-	const [prazo, setPrazo] = useState('')
-	const [status, setStatus] = useState<NonNullable<Project['status']>>('ativo')
-	const [cor, setCor] = useState(0)
-	const [categoria, setCategoria] = useState('')
-	const [prioridade, setPrioridade] = useState<Priority>(0)
-	const [confirmando, setConfirmando] = useState(false)
-	const categorias = useCategorias()
-
-	// Recarrega os campos quando outro projeto é escolhido.
-	const idAtual = projeto?.id
-	useMemo(() => {
-		if (!projeto) return
-		setNome(projeto.name)
-		setEtapa(projeto.etapa ?? '')
-		setPrazo(projeto.prazo ?? '')
-		setStatus(projeto.status ?? 'ativo')
-		setCor(Number(projeto.color ?? 0))
-		setCategoria(projeto.categoria ?? '')
-		setPrioridade(projeto.priority ?? 0)
-		setConfirmando(false)
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [idAtual])
-
-	return (
-		<Folha
-			titulo="Editar projeto"
-			aberta={projeto !== null}
-			onFechar={onFechar}
-			passo={confirmando ? 'excluir' : 'editar'}
-		>
-			{confirmando ? (
-				<div className="formulario">
-					<p className="nota">
-						Excluir <strong>{projeto?.name}</strong> remove as tarefas, os marcos e as páginas que
-						estão nele. Não dá para desfazer.
-					</p>
-					<div className="formulario__acoes">
-						<button type="button" className="botao" onClick={() => setConfirmando(false)}>
-							Manter
-						</button>
-						<button
-							type="button"
-							className="botao botao--perigo-solido"
-							onClick={() => {
-								if (!projeto) return
-								void softDeleteProject(projeto.id)
-								onFechar()
-							}}
-						>
-							Excluir projeto
-						</button>
-					</div>
-				</div>
-			) : (
-				<form
-					className="formulario"
-					onSubmit={(evento) => {
-						evento.preventDefault()
-						if (!projeto || !nome.trim()) return
-						void updateProject(projeto.id, {
-							name: nome.trim(),
-							etapa: etapa.trim() || null,
-							prazo: prazo || null,
-							status,
-							color: String(cor),
-							categoria: categoria.trim() || null,
-							priority: prioridade,
-						})
-						onFechar()
-					}}
-				>
-					<div>
-						<label className="campo-rotulo" htmlFor="central-projeto-nome">
-							Nome
-						</label>
-						<input
-							id="central-projeto-nome"
-							data-foco-inicial
-							className="campo"
-							value={nome}
-							onChange={(evento) => setNome(evento.target.value)}
-							maxLength={80}
-						/>
-					</div>
-
-					<div>
-						<label className="campo-rotulo" htmlFor="central-projeto-etapa">
-							Etapa atual
-						</label>
-						<input
-							id="central-projeto-etapa"
-							className="campo"
-							value={etapa}
-							onChange={(evento) => setEtapa(evento.target.value)}
-							placeholder="Ex.: Aguardando aprovação"
-							maxLength={60}
-						/>
-					</div>
-
-					<div>
-						<label className="campo-rotulo" htmlFor="central-projeto-prazo">
-							Prazo
-						</label>
-						<input
-							id="central-projeto-prazo"
-							type="date"
-							className="campo"
-							value={prazo}
-							onChange={(evento) => setPrazo(evento.target.value)}
-						/>
-					</div>
-
-					<div>
-						<span className="campo-rotulo">Estado</span>
-						<div className="segmentado" role="group" aria-label="Estado do projeto">
-							{(['ativo', 'pausado', 'concluido'] as const).map((valor) => (
-								<button
-									key={valor}
-									type="button"
-									className="segmentado__item"
-									aria-pressed={status === valor}
-									onClick={() => setStatus(valor)}
-								>
-									{ESTADOS[valor].rotulo}
-								</button>
-							))}
-						</div>
-					</div>
-
-					<div>
-						<span className="campo-rotulo">Cor</span>
-						<div className="amostra-cores" role="group" aria-label="Cor do projeto">
-							{PALETA.slice(0, 8).map((item) => (
-								<button
-									key={item.indice}
-									type="button"
-									className="amostra-cor"
-									style={{ background: item.hex }}
-									aria-label={item.rotulo}
-									aria-pressed={cor === item.indice}
-									onClick={() => setCor(item.indice)}
-								/>
-							))}
-						</div>
-					</div>
-
-					<div>
-						<span className="campo-rotulo">Prioridade</span>
-						<div className="segmentado" role="group" aria-label="Prioridade do projeto">
-							{([0, 1, 2, 3] as const).map((valor) => (
-								<button
-									key={valor}
-									type="button"
-									className="segmentado__item"
-									aria-pressed={prioridade === valor}
-									onClick={() => setPrioridade(valor)}
-								>
-									{valor === 0 ? 'Nenhuma' : valor === 1 ? 'Baixa' : valor === 2 ? 'Média' : 'Alta'}
-								</button>
-							))}
-						</div>
-						<p className="nota">
-							Prioridade pesa na ordenação. Arrastar o projeto muda a ordem manual; a
-							prioridade vem por cima quando a lista está em “Prioridade”.
-						</p>
-					</div>
-
-					<div>
-						<label className="campo-rotulo" htmlFor="central-projeto-categoria">
-							Categoria
-						</label>
-						<input
-							id="central-projeto-categoria"
-							className="campo"
-							value={categoria}
-							onChange={(evento) => setCategoria(evento.target.value)}
-							placeholder="Ex.: Trabalho, Casa, Estudos"
-							list="categorias-existentes"
-							maxLength={40}
-						/>
-						<datalist id="categorias-existentes">
-							{categorias.map((item) => (
-								<option key={item} value={item} />
-							))}
-						</datalist>
-						<p className="nota">
-							Escreva ou escolha uma que já existe. Vazio significa sem categoria.
-						</p>
-					</div>
-
-					<div className="formulario__acoes" style={{ justifyContent: 'space-between' }}>
-						<button type="button" className="botao botao--perigo" onClick={() => setConfirmando(true)}>
-							Excluir
-						</button>
-						<button type="submit" className="botao botao--primario" disabled={!nome.trim()}>
-							Salvar
-						</button>
-					</div>
-				</form>
-			)}
-		</Folha>
-	)
+/**
+ * Bolinhas de progresso.
+ *
+ * Com até 14 tarefas, cada bolinha é uma tarefa: a leitura é imediata. Acima
+ * disso viram 14 marcadores proporcionais — contar 40 bolinhas não informa
+ * nada e some numa tela de 360 px.
+ */
+export function pontosDeProgresso(concluidas: number, total: number): boolean[] {
+	if (total <= 0) return []
+	const quantos = Math.min(14, total)
+	const cheios = Math.round((concluidas / total) * quantos)
+	return Array.from({ length: quantos }, (_, indice) => indice < cheios)
 }
 
 export function Projetos() {
@@ -362,12 +306,16 @@ export function Projetos() {
 	const [editando, setEditando] = useState<Project | null>(null)
 	const [ordem, setOrdem] = useState<OrdemDeProjetos>('prazo')
 	const [categoriaFiltro, setCategoriaFiltro] = useState<string>('todas')
+	/**
+	 * Filtro por estado.
+	 *
+	 * Os chips de estado eram só um resumo (span, sem clique): mostravam
+	 * quantos estavam pausados e não deixavam esconder o resto. Agora são
+	 * filtro de verdade, junto com o de categoria.
+	 */
+	const [estadoFiltro, setEstadoFiltro] = useState<'todos' | NonNullable<Project['status']>>('todos')
 	const categorias = useCategorias()
-
-	const [nome, setNome] = useState('')
-	const [descricao, setDescricao] = useState('')
-	const [prazo, setPrazo] = useState('')
-	const [cor, setCor] = useState(1)
+	const desfazerExclusao = useDesfazerExclusao()
 
 	const resumos = useMemo<ResumoDoProjeto[]>(() => {
 		if (!projetos) return []
@@ -380,15 +328,21 @@ export function Projetos() {
 		}
 		return projetos.map((projeto) => resumirProjeto(projeto, porProjeto.get(projeto.id) ?? []))
 	}, [projetos, tarefas])
+	const anexos = useAnexosDosProjetos()
 
 	/** Filtro por categoria: "todas" mostra tudo, "sem" mostra quem não tem. */
 	const filtrados = useMemo(() => {
-		if (categoriaFiltro === 'todas') return resumos
-		if (categoriaFiltro === 'sem') {
-			return resumos.filter((r) => !r.projeto.categoria?.trim())
-		}
-		return resumos.filter((r) => r.projeto.categoria?.trim() === categoriaFiltro)
-	}, [resumos, categoriaFiltro])
+		const porCategoria = (() => {
+			if (categoriaFiltro === 'todas') return resumos
+			if (categoriaFiltro === 'sem') {
+				return resumos.filter((r) => !r.projeto.categoria?.trim())
+			}
+			return resumos.filter((r) => r.projeto.categoria?.trim() === categoriaFiltro)
+		})()
+
+		if (estadoFiltro === 'todos') return porCategoria
+		return porCategoria.filter((r) => (r.projeto.status ?? 'ativo') === estadoFiltro)
+	}, [resumos, categoriaFiltro, estadoFiltro])
 
 	const faixas = useMemo(() => {
 		const mapa = new Map<FaixaDeProjeto, ResumoDoProjeto[]>()
@@ -405,28 +359,27 @@ export function Projetos() {
 	}, [filtrados, ordem])
 
 	const totalAtrasados = resumos.filter((r) => r.prazoVencido).length
-	// Contagem por estado, para o topo dizer o que existe sem precisar abrir nada.
+	/**
+	 * Contagem por situação.
+	 *
+	 * O seletor mostra só o rótulo ("Ativo"), para caber inteiro e dividir a
+	 * largura; a contagem vai no `aria-label`, onde ela ainda informa quem usa
+	 * leitor de tela sem ocupar espaço na faixa.
+	 */
 	const porEstado = {
 		ativo: resumos.filter((r) => (r.projeto.status ?? 'ativo') === 'ativo').length,
 		pausado: resumos.filter((r) => r.projeto.status === 'pausado').length,
 		concluido: resumos.filter((r) => r.projeto.status === 'concluido').length,
 	}
+	const temFiltro = categoriaFiltro !== 'todas' || estadoFiltro !== 'todos'
 
-	async function salvar(): Promise<void> {
-		const texto = nome.trim()
-		if (!texto) return
-		const criado: Project = await createProject({ name: texto })
-		await updateProject(criado.id, {
-			color: String(cor),
-			descricao: descricao.trim() || null,
-			prazo: prazo || null,
-			status: 'ativo',
-		})
-		setNome('')
-		setDescricao('')
-		setPrazo('')
-		setCriando(false)
-	}
+	/**
+	 * Criar projeto: o mesmo formulário da folha de Tarefas e do FAB.
+	 *
+	 * Antes esta tela tinha o próprio formulário de sete campos, e o FAB e o
+	 * chip de Tarefas criavam com um ou dois. Agora há um componente só
+	 * (`CriarProjeto`), com todos os campos, em todos os pontos de entrada.
+	 */
 
 	return (
 		<div className="tela">
@@ -470,8 +423,8 @@ export function Projetos() {
 								<IconePasta size={28} />
 							</span>
 							<p>
-								Nenhum projeto ainda. Um projeto junta tarefas, um prazo e as páginas de desenho
-								que pertencem a ele.
+								Nenhum projeto ainda. Um projeto junta tarefas, prazos, marcos e as
+								anotações que pertencem a ele.
 							</p>
 							<button type="button" className="botao botao--primario" onClick={() => setCriando(true)}>
 								<IconeAdicionar size={20} />
@@ -481,171 +434,173 @@ export function Projetos() {
 					</div>
 				) : (
 					<>
-						{/* Resumo por estado: dá para ver o que está ativo, pausado e
-						    concluído antes de rolar a lista. */}
-						<div className="secao">
-							<div className="chips" style={{ paddingLeft: 0, paddingRight: 0 }}>
-								{(['ativo', 'pausado', 'concluido'] as const).map((valor) => (
-									<span key={valor} className={`chip chip--pequeno selo ${ESTADOS[valor].classe}`}>
-										{ESTADOS[valor].rotulo}
-										<span className="chip__contagem">{porEstado[valor]}</span>
-									</span>
+						{/*
+						 * Filtros.
+						 *
+						 * Um título só, "Ordenar por", acima de TODOS os
+						 * seletores — é o que o dono pediu e é o que o padrão
+						 * da tela estabelece. Os blocos abaixo (situação,
+						 * categoria, ordem) não têm título próprio: são
+						 * autoexplicativos pelos valores que mostram ("Ativo",
+						 * "Trabalho", "Prazo").
+						 *
+						 * O seletor de categoria ficava escondido quando não
+						 * havia nenhuma categoria cadastrada — com um projeto
+						 * recém-criado, a lista vinha vazia e o seletor inteiro
+						 * desaparecia, o que parecia "sumiu a categoria". Agora
+						 * ele aparece sempre, com "Todas" e "Sem categoria",
+						 * mesmo sem categoria no banco.
+						 *
+						 * Todos os controles ocupam a largura do contêiner e
+						 * dividem o espaço entre os itens: nada alinhado à
+						 * esquerda deixando vazio à direita.
+						 */}
+						<div className="filtros-projetos">
+							<p className="filtros-projetos__titulo">Ordenar por</p>
+
+							<div className="segmentado" role="group" aria-label="Situação dos projetos">
+								{(['todos', 'ativo', 'pausado', 'concluido'] as const).map((valor) => (
+									<button
+										key={valor}
+										type="button"
+										className="segmentado__item"
+										aria-pressed={estadoFiltro === valor}
+										aria-label={
+											valor === 'todos'
+												? `Todos, ${resumos.length}`
+												: `${ESTADOS[valor].rotulo}, ${porEstado[valor]}`
+										}
+										onClick={() => setEstadoFiltro(valor)}
+									>
+										{valor === 'todos' ? 'Todos' : ESTADOS[valor].rotulo}
+									</button>
 								))}
 							</div>
 
-							{/* Categoria: filtra sem esconder o que não tem. */}
-							{categorias.length > 0 ? (
-								<div className="chips" role="group" aria-label="Filtrar por categoria" style={{ paddingLeft: 0, paddingRight: 0 }}>
+							<div className="segmentado" role="group" aria-label="Categoria do projeto">
+								<button
+									type="button"
+									className="segmentado__item"
+									aria-pressed={categoriaFiltro === 'todas'}
+									onClick={() => setCategoriaFiltro('todas')}
+								>
+									Todas
+								</button>
+								{categorias.map((item) => (
 									<button
+										key={item}
 										type="button"
-										className="chip chip--pequeno"
-										aria-pressed={categoriaFiltro === 'todas'}
-										onClick={() => setCategoriaFiltro('todas')}
+										className="segmentado__item"
+										aria-pressed={categoriaFiltro === item}
+										onClick={() => setCategoriaFiltro(item)}
 									>
-										Todas
+										{item}
 									</button>
-									{categorias.map((item) => (
-										<button
-											key={item}
-											type="button"
-											className="chip chip--pequeno"
-											aria-pressed={categoriaFiltro === item}
-											onClick={() => setCategoriaFiltro(item)}
-										>
-											{item}
-										</button>
-									))}
-									<button
-										type="button"
-										className="chip chip--pequeno"
-										aria-pressed={categoriaFiltro === 'sem'}
-										onClick={() => setCategoriaFiltro('sem')}
-									>
-										Sem categoria
-									</button>
-								</div>
-							) : null}
-
-							{/* Ordenação: a pergunta muda (o que vence antes? onde tem mais
-							    trabalho? o que mexi por último?), então a lista deixa escolher. */}
-							<div className="projeto-ordem" role="group" aria-label="Ordenar projetos">
-								<span className="projeto-ordem__rotulo">Ordenar por</span>
-								<div className="segmentado">
-									{(Object.keys(ROTULO_DA_ORDEM) as OrdemDeProjetos[]).map((valor) => (
-										<button
-											key={valor}
-											type="button"
-											className="segmentado__item"
-											aria-pressed={ordem === valor}
-											onClick={() => setOrdem(valor)}
-										>
-											{ROTULO_DA_ORDEM[valor]}
-										</button>
-									))}
-								</div>
+								))}
+								<button
+									type="button"
+									className="segmentado__item"
+									aria-pressed={categoriaFiltro === 'sem'}
+									onClick={() => setCategoriaFiltro('sem')}
+								>
+									Sem
+								</button>
 							</div>
+
+							<div className="segmentado" role="group" aria-label="Ordenar projetos">
+								{(Object.keys(ROTULO_DA_ORDEM) as OrdemDeProjetos[]).map((valor) => (
+									<button
+										key={valor}
+										type="button"
+										className="segmentado__item"
+										aria-pressed={ordem === valor}
+										onClick={() => setOrdem(valor)}
+									>
+										{ROTULO_DA_ORDEM[valor]}
+									</button>
+								))}
+							</div>
+
+							{temFiltro ? (
+								<button
+									type="button"
+									className="botao botao--texto filtros-projetos__limpar"
+									onClick={() => {
+										setCategoriaFiltro('todas')
+										setEstadoFiltro('todos')
+									}}
+								>
+									<IconeFechar size={14} />
+									Limpar {categoriaFiltro !== 'todas' ? 'categoria' : 'situação'}
+								</button>
+							) : null}
 						</div>
 
-						{faixas.map((grupo) => (
-							<section className="secao" key={grupo.faixa} aria-label={ROTULO_DA_FAIXA[grupo.faixa]}>
-								<div className="secao-cabecalho">
-									<h2 className="secao-titulo">
-										{ROTULO_DA_FAIXA[grupo.faixa]}
-										<span className="secao-titulo__contagem">{grupo.itens.length}</span>
-									</h2>
+						{faixas.length === 0 ? (
+							<div className="secao">
+								<div className="cartao cartao--vazio">
+									<p>Nenhum projeto com esses filtros.</p>
+									<button
+										type="button"
+										className="botao"
+										onClick={() => {
+											setCategoriaFiltro('todas')
+											setEstadoFiltro('todos')
+										}}
+									>
+										Limpar filtros
+									</button>
 								</div>
-								<div className="projeto-lista">
-									{grupo.itens.map((resumo) => (
-										<CartaoDeProjeto key={resumo.projeto.id} resumo={resumo} onEditar={setEditando} />
-									))}
-								</div>
-							</section>
-						))}
+							</div>
+						) : (
+							faixas.map((grupo) => (
+								<section className="secao" key={grupo.faixa} aria-label={ROTULO_DA_FAIXA[grupo.faixa]}>
+									<div className="secao-cabecalho">
+										<h2 className="secao-titulo">
+											{ROTULO_DA_FAIXA[grupo.faixa]}
+											<span className="secao-titulo__contagem">{grupo.itens.length}</span>
+										</h2>
+									</div>
+									<div className="projeto-lista">
+										{grupo.itens.map((resumo) => (
+											<CartaoDeProjeto
+												key={resumo.projeto.id}
+												resumo={resumo}
+												anexos={anexos?.get(resumo.projeto.id)}
+												onEditar={setEditando}
+											/>
+										))}
+									</div>
+								</section>
+							))
+						)}
 					</>
 				)}
 			</div>
 
-			<Folha titulo="Novo projeto" aberta={criando} onFechar={() => setCriando(false)}>
-				<form
-					className="formulario"
-					onSubmit={(evento) => {
-						evento.preventDefault()
-						void salvar()
-					}}
-				>
-					<div>
-						<label className="campo-rotulo" htmlFor="projeto-nome">
-							Nome
-						</label>
-						<input
-							id="projeto-nome"
-							data-foco-inicial
-							className="campo"
-							value={nome}
-							onChange={(evento) => setNome(evento.target.value)}
-							placeholder="Ex.: Reforma do quarto"
-							maxLength={80}
-						/>
-					</div>
+			<CriarProjeto aberto={criando} onFechar={() => setCriando(false)} />
 
-					<div>
-						<label className="campo-rotulo" htmlFor="projeto-descricao">
-							O que este projeto entrega
-						</label>
-						<textarea
-							id="projeto-descricao"
-							className="campo campo--area"
-							value={descricao}
-							onChange={(evento) => setDescricao(evento.target.value)}
-							placeholder="Uma linha que ajude a lembrar por que ele existe."
-							rows={2}
-							maxLength={200}
-						/>
-					</div>
+			{/* Excluir projeto pela edição: o editor avisa a tela para oferecer o
+			    desfazer, que restaura o projeto E o que desceu com ele. */}
+			<EditarProjeto
+				projeto={editando}
+				aberto={editando !== null}
+				onFechar={() => setEditando(null)}
+				onExcluido={(projeto) =>
+					desfazerExclusao.anunciar({
+						texto: `Excluído: ${projeto.name}`,
+						restaurar: () => escrever(() => restaurarProject(projeto.id)),
+					})
+				}
+			/>
 
-					<div>
-						<label className="campo-rotulo" htmlFor="projeto-prazo">
-							Prazo
-						</label>
-						<input
-							id="projeto-prazo"
-							type="date"
-							className="campo"
-							value={prazo}
-							onChange={(evento) => setPrazo(evento.target.value)}
-						/>
-						<p className="nota">Opcional. Sem prazo, o projeto entra em "Sem prazo".</p>
-					</div>
-
-					<div>
-						<span className="campo-rotulo">Cor</span>
-						<div className="amostra-cores" role="group" aria-label="Cor do projeto">
-							{PALETA.slice(0, 8).map((item) => (
-								<button
-									key={item.indice}
-									type="button"
-									className="amostra-cor"
-									style={{ background: corDoIndice(item.indice).hex }}
-									aria-label={item.rotulo}
-									aria-pressed={cor === item.indice}
-									onClick={() => setCor(item.indice)}
-								/>
-							))}
-						</div>
-					</div>
-
-					<div className="formulario__acoes">
-						<button type="button" className="botao" onClick={() => setCriando(false)}>
-							Cancelar
-						</button>
-						<button type="submit" className="botao botao--primario" disabled={!nome.trim()}>
-							Criar projeto
-						</button>
-					</div>
-				</form>
-			</Folha>
-
-			<EditarProjetoRapido projeto={editando} onFechar={() => setEditando(null)} />
+			{desfazerExclusao.pendente ? (
+				<FaixaDesfazer
+					texto={desfazerExclusao.pendente.texto}
+					onDesfazer={desfazerExclusao.desfazer}
+					onFechar={desfazerExclusao.fechar}
+				/>
+			) : null}
 		</div>
 	)
 }

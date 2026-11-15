@@ -7,7 +7,13 @@
 .shell {
 	display: flex;
 	flex-direction: column;
-	min-height: 100dvh;
+	/*
+	 * Altura visível quando o teclado está aberto (publicada por
+	 * `AppShell.tsx`); `dvh` no resto do tempo. Sem isto, o rodapé de uma lista
+	 * longa fica atrás do teclado no WebView do Android, que não encolhe o
+	 * viewport de layout.
+	 */
+	min-height: var(--altura-visivel, 100dvh);
 	background: var(--background);
 }
 
@@ -27,8 +33,45 @@
 	bottom: 0;
 	z-index: 40;
 	padding-bottom: env(safe-area-inset-bottom);
+	/*
+	 * Barra um degrau acima do fundo, com separador que não é risco.
+	 *
+	 * Antes ela era exactamente a mesma cor da superfície e só um fio de 1 px
+	 * dizia onde começava — no aparelho parecia que a lista simplesmente
+	 * acabava. Um tom acima (`--surface-container`) com sombra curta dá o
+	 * "degrau" que a barra precisa para parecer um objeto, não um corte.
+	 */
 	background: var(--surface-container);
-	border-top: 1px solid color-mix(in srgb, var(--outline-variant) 55%, transparent);
+	box-shadow: 0 -1px 0 color-mix(in srgb, var(--divisor) 45%, transparent);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	transition: transform var(--dur) var(--ease);
+}
+
+/*
+ * Com o teclado aberto a barra sai de baixo do dedo.
+ *
+ * `position: fixed` prende o elemento à viewport de LAYOUT: no WebView do
+ * Android o teclado abre por cima dela, e os seis destinos ficavam atrás do
+ * teclado — tocáveis sem querer ao digitar, e inalcançáveis quando se queria
+ * usá-los. Deslizar para baixo é o que o Material faz com a navigation bar em
+ * modo de edição.
+ */
+:root[data-teclado='aberto'] .navegacao {
+	transform: translateY(100%);
+}
+
+/* O mesmo vale para os flutuantes: atrás do teclado eles não servem para nada
+   e ainda capturam toque. */
+:root[data-teclado='aberto'] .fab-area {
+	transform: translateY(calc(100% + var(--nav-h)));
+	pointer-events: none;
+}
+
+/* O aviso é centrado com `translateX`; a saída precisa preservar o eixo X. */
+:root[data-teclado='aberto'] .desfazer {
+	transform: translate(-50%, calc(100% + var(--nav-h)));
+	pointer-events: none;
 }
 
 .destinos {
@@ -39,7 +82,10 @@
 	height: var(--nav-h);
 	max-width: var(--content-max);
 	margin: 0 auto;
-	padding: 0 var(--s-1);
+	padding: 0 var(--s-2);
+	/* `align-items: center`: o item não estica até a borda da barra, então o
+	   indicador de 46 px tem 7 px de respiro em cima e embaixo. */
+	align-items: center;
 }
 
 /* Indicador único que desliza entre os itens.
@@ -50,23 +96,50 @@
    indicador fica escondido. */
 .destinos__indicador {
 	position: absolute;
-	top: calc(50% - 22px);
-	left: var(--s-1);
-	width: calc((100% - var(--s-1) * 2) / 6);
-	height: 28px;
-	border-radius: var(--r-pill);
-	background: var(--secondary-container);
+	top: calc(50% - 27px);
+	left: var(--s-2);
+	/* POR DESTINO: a conta é `100% / <quantidade>`. Quando o Jarvis entrou na
+	   barra, isto ficou dividindo por 6 com 7 destinos — o indicador deslizava
+	   deslocado e a pílula invadia o item vizinho (visto no aparelho). Use a
+	   variável, e ela é definida pelo componente que sabe a contagem. */
+	width: calc((100% - var(--s-2) * 2) / var(--qtd-destinos, 5));
+	/*
+	 * 54 px de altura, e não 46.
+	 *
+	 * O contorno estava colado no ícone e no rótulo: com 46 a pílula cobria
+	 * ícone (26) + vão (3) + rótulo (14) sem nenhum respiro, e a borda encostava
+	 * no desenho. 54 dá 4 px acima do ícone e 4 abaixo do rótulo — o suficiente
+	 * para o contorno ser contorno, sem virar uma caixa grande.
+	 */
+	height: 54px;
+	border-radius: 14px;
+	/*
+	 * Fundo tonal em vez de cor cheia.
+	 *
+	 * A pílula era `--secondary-container`, um tom de fundo; sobre a barra ela
+	 * sumia. Aqui é a cor da marca diluída a 14%, que dá presença sem virar o
+	 * botão principal da tela — o rótulo em `--primary` faz o resto.
+	 */
+	/*
+	 * A pílula usa o ACENTO, não um papel de apoio.
+	 *
+	 * Era `--secondary-container`. Com o motor cromático isso passou a ser um
+	 * problema real: escolher a harmonia Tríade deixava a barra inferior
+	 * verde-limão, porque a secundária virou a cor oposta da semente. A barra é
+	 * chrome — ela deve acompanhar a cor que o usuário escolheu para o app, não
+	 * a cor de apoio que ele escolheu para os cartões.
+	 */
+	background: var(--primary-container);
 	transform: translateX(calc(var(--destino-ativo, 0) * 100%));
 	transform-origin: center;
 	transition:
-		transform var(--dur) var(--ease),
+		transform var(--dur) var(--ease-emphasized),
 		opacity var(--dur-fast) var(--ease);
 	pointer-events: none;
 	z-index: 0;
 }
 
-.destinos:not([data-ativo='0']):not([data-ativo='1']):not([data-ativo='2']):not([data-ativo='3']):not([data-ativo='4']):not([data-ativo='5'])
-	.destinos__indicador {
+.destinos:not([data-ativo]) .destinos__indicador {
 	opacity: 0;
 }
 
@@ -88,6 +161,9 @@
 .destinos[data-ativo='5'] {
 	--destino-ativo: 5;
 }
+.destinos[data-ativo='6'] {
+	--destino-ativo: 6;
+}
 
 .destino {
 	position: relative;
@@ -96,14 +172,20 @@
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 2px;
+	gap: 3px;
 	min-width: 0;
-	padding: 4px 2px;
+	min-height: var(--toque);
+	padding: var(--s-1) var(--s-0-5);
+	border-radius: var(--r-xl);
 	color: var(--on-surface-variant);
-	font-size: 10.5px;
+	/* `--text-xs` e não 10,5 px: o rótulo da barra era o único texto abaixo da
+	   escala, e é o que mais aparece na tela. */
+	font-size: var(--text-xs);
 	font-weight: var(--w-semibold);
 	letter-spacing: 0.01em;
-	transition: color var(--dur) var(--ease);
+	transition:
+		color var(--dur) var(--ease),
+		background var(--dur) var(--ease);
 }
 
 /* O ícone em si não carrega mais o fundo: quem desenha a pílula do item
@@ -113,19 +195,48 @@
 	z-index: 1;
 	display: grid;
 	place-items: center;
-	width: 56px;
-	height: 28px;
+	width: 52px;
+	height: 26px;
 	border-radius: var(--r-pill);
-	transition: color var(--dur) var(--ease);
+	/* `transform` estava fora da transição: o `:active` aplicava e removia o
+	   `scale(0.9)` no mesmo quadro, o que parece tremor, não resposta. */
+	transition:
+		color var(--dur) var(--ease),
+		transform var(--dur) var(--ease-spring);
 }
 
+/*
+ * Item ativo.
+ *
+ * `aria-current` é o estado semântico; a cor e o leve crescimento do ícone são
+ * o que o olho lê. O fundo da pílula vem do indicador que desliza atrás, então
+ * aqui não há `background` — os dois juntos davam um tom duplo, mais escuro no
+ * item ativo do que no resto da barra.
+ */
 .destino[aria-current='page'] {
-	color: var(--on-secondary-container);
+	/* `--primary` como TEXTO reprova contraste (2,5–3,7:1 conforme a semente).
+	   `--on-accent` é a mesma matiz, medida a 4,94:1 no pior caso — e o teste
+	   de estilo barra o outro token de propósito. O fundo é
+	   `--primary-container`, então a tinta acompanha o par dele. */
+	color: var(--on-primary-container);
 	font-weight: var(--w-bold);
 }
 
+.destino[aria-current='page'] .destino__icone {
+	transform: scale(1.06);
+}
+
+.destino:active {
+	background: color-mix(in srgb, var(--on-accent) 8%, transparent);
+}
+
 .destino:active .destino__icone {
-	transform: scale(0.9);
+	transform: scale(0.92);
+}
+
+/* Sem preferência por movimento, o ícone não cresce: o estado já é a cor. */
+:root[data-movimento='reduzido'] .destino[aria-current='page'] .destino__icone {
+	transform: none;
 }
 
 .destino__rotulo {
@@ -136,16 +247,6 @@
 }
 
 /* O "+" central, quando houver, é um FAB de verdade — não um destino. */
-.destino--criar .destino__icone {
-	width: 52px;
-	height: 52px;
-	border-radius: var(--r-lg);
-	background: var(--primary-container);
-	color: var(--on-primary-container);
-	margin-top: -10px;
-	box-shadow: var(--elev-1);
-}
-
 /* --------------------------------------------------------------------- rail */
 
 @media (min-width: 900px) {
@@ -158,7 +259,8 @@
 		right: auto;
 		width: var(--rail-w);
 		border-top: 0;
-		border-right: 1px solid color-mix(in srgb, var(--outline-variant) 55%, transparent);
+		border-right: var(--hairline) solid var(--divisor);
+		border-right: var(--hairline) solid color-mix(in srgb, var(--divisor) 55%, transparent);
 		padding-bottom: 0;
 		padding-top: env(safe-area-inset-top);
 	}
@@ -189,7 +291,7 @@
 	}
 
 	.destino__icone {
-		width: 56px;
-		height: 32px;
+		width: var(--toque-grande);
+		height: var(--s-8);
 	}
 }

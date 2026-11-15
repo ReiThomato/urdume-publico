@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useEffect } from 'react'
 import { useRouter } from '@/app/router'
-import { softDeleteTask, toggleTask, useAllTasks, useDayCounts, useTasksByDay } from '@/db/repo'
+import { restaurarEvento } from '@/db/eventos'
+import { restaurarTask, softDeleteTask, toggleTask, useAllTasks, useDayCounts, useTasksByDay } from '@/db/repo'
 import {
 	capitalizar,
 	chaveDoDia,
@@ -15,7 +16,7 @@ import { Topo } from '@/ui/AppShell'
 import { IconeAdicionar, IconeAnterior, IconeCalendario, IconeEvento, IconeExpandir, IconeProximo } from '@/ui/icones'
 import { LinhaDoDia } from '@/ui/LinhaDoDia'
 import { EditarEvento } from '@/ui/EditarEvento'
-import { ConfirmarExclusaoTarefa } from '@/ui/ConfirmarExclusaoTarefa'
+import { DURACAO_DO_DESFAZER, ExcluirComDesfazer, FaixaDesfazer, useDesfazerExclusao } from '@/ui/ExcluirComDesfazer'
 import { useEventosDoDia, useEventosEntre } from '@/db/use-eventos'
 import type { Evento } from '@/db/db'
 import { TarefaItem } from '@/ui/TarefaItem'
@@ -25,7 +26,7 @@ import type { Task } from '@/db/db'
 import { Folha } from '@/ui/Folha'
 import { escrever } from '@/lib/falhas'
 
-export interface CalendarioProps {
+interface CalendarioProps {
 	dia?: string
 	onCriar: (opcoes?: {
 		tipo?: 'tarefa' | 'projeto' | 'lembrete' | 'evento' | 'habito'
@@ -85,8 +86,14 @@ export function Calendario({ dia, onCriar }: CalendarioProps) {
 	const tarefasDoDia = useTasksByDay(selecionado)
 	const eventosDoDia = useEventosDoDia(selecionado)
 	const [eventoAberto, setEventoAberto] = useState<Evento | null>(null)
+	const desfazerExclusao = useDesfazerExclusao()
 
 	const nomesDeProjeto = useMemo(() => new Map((projetos ?? []).map((p) => [p.id, p])), [projetos])
+	/** Cor escolhida de cada projeto: a agenda respeita a escolha, não o hash. */
+	const coresDosProjetos = useMemo(
+		() => new Map((projetos ?? []).map((p) => [p.id, p.color ?? null])),
+		[projetos],
+	)
 
 	function mudarMes(delta: number): void {
 		setMesVisivel((atual) => {
@@ -233,23 +240,21 @@ export function Calendario({ dia, onCriar }: CalendarioProps) {
 				</div>
 
 				{desfazer ? (
-					<div className="desfazer" role="status" aria-live="polite">
-						<span className="desfazer__texto">Concluída: {desfazer.titulo}</span>
-						<button
-							type="button"
-							className="botao botao--texto"
-							onClick={() => {
-								escrever(() => toggleTask(desfazer.id, false))
-								setDesfazer(null)
-								window.clearTimeout(desfazerTimer.current)
-							}}
-						>
-							Desfazer
-						</button>
-					</div>
+					<FaixaDesfazer
+						texto={`Concluída: ${desfazer.titulo}`}
+						onDesfazer={() => {
+							escrever(() => toggleTask(desfazer.id, false))
+							setDesfazer(null)
+							window.clearTimeout(desfazerTimer.current)
+						}}
+						onFechar={() => {
+							setDesfazer(null)
+							window.clearTimeout(desfazerTimer.current)
+						}}
+					/>
 				) : null}
 
-				<section className="secao" aria-labelledby="secao-dia" style={{ marginTop: 'var(--s-5)' }}>
+				<section className="secao" aria-labelledby="secao-dia">
 					<div className="secao-cabecalho">
 						<h2 className="secao-titulo" id="secao-dia">
 							<span className="secao-titulo__icone" aria-hidden="true">
@@ -321,7 +326,7 @@ export function Calendario({ dia, onCriar }: CalendarioProps) {
 														tarefa={tarefa}
 														lista={
 															projeto
-																? { id: projeto.id, nome: projeto.name, cor: Number(projeto.color ?? 0) }
+																? { id: projeto.id, nome: projeto.name, cor: projeto.color }
 																: undefined
 														}
 														onEditar={setEditando}
@@ -371,12 +376,13 @@ export function Calendario({ dia, onCriar }: CalendarioProps) {
 										<LinhaDoDia
 											dia={selecionado}
 											tarefas={tarefasDoDia}
+											coresDosProjetos={coresDosProjetos}
 											onAbrirEvento={setEventoAberto}
 											onConcluir={(id, titulo) => {
 												escrever(() => toggleTask(id, true))
 												setDesfazer({ id, titulo })
 												window.clearTimeout(desfazerTimer.current)
-												desfazerTimer.current = window.setTimeout(() => setDesfazer(null), 4000)
+												desfazerTimer.current = window.setTimeout(() => setDesfazer(null), DURACAO_DO_DESFAZER)
 											}}
 										/>
 									</div>
@@ -438,18 +444,38 @@ export function Calendario({ dia, onCriar }: CalendarioProps) {
 				etiquetasConhecidas={[...new Set((tarefasDoDia ?? []).flatMap((t) => t.tags ?? []))].sort()}
 			/>
 
-			<EditarEvento evento={eventoAberto} onFechar={() => setEventoAberto(null)} />
-
-			{/* Mesma folha de exclusão das outras telas: a Agenda era o único
-			    lugar com tarefas sem o atalho de lixeira. */}
-			<ConfirmarExclusaoTarefa
-				tarefa={excluindoTarefa}
-				onFechar={() => setExcluindoTarefa(null)}
-				onExcluir={async (alvo) => {
-					await softDeleteTask(alvo.id)
-					setExcluindoTarefa(null)
-				}}
+			<EditarEvento
+				evento={eventoAberto}
+				onFechar={() => setEventoAberto(null)}
+				onExcluido={(evento) =>
+					desfazerExclusao.anunciar({
+						texto: `Excluído: ${evento.title}`,
+						restaurar: () => escrever(() => restaurarEvento(evento.id.split('@')[0]!)),
+					})
+				}
 			/>
+
+			{/* Mesma exclusão com desfazer das outras telas. */}
+			<ExcluirComDesfazer
+				alvo={excluindoTarefa ? { id: excluindoTarefa.id, titulo: excluindoTarefa.title } : null}
+				titulo="Excluir tarefa"
+				descricao={(alvo) => (
+					<>
+						Excluir <strong>{alvo.titulo}</strong>? Ela sai de todas as visões deste aparelho.
+					</>
+				)}
+				onFechar={() => setExcluindoTarefa(null)}
+				onExcluir={(alvo) => softDeleteTask(alvo.id)}
+				onDesfazer={(alvo) => restaurarTask(alvo.id)}
+			/>
+
+			{desfazerExclusao.pendente ? (
+				<FaixaDesfazer
+					texto={desfazerExclusao.pendente.texto}
+					onDesfazer={desfazerExclusao.desfazer}
+					onFechar={desfazerExclusao.fechar}
+				/>
+			) : null}
 		</div>
 	)
 }
@@ -471,7 +497,7 @@ function HistoricoDoMes({ ano, mes }: { ano: number; mes: number }) {
 	if (concluidas.length === 0) return null
 
 	return (
-		<section className="secao" aria-labelledby="secao-historico" style={{ marginTop: 'var(--s-5)' }}>
+		<section className="secao" aria-labelledby="secao-historico">
 			<div className="secao-cabecalho">
 				<h2 className="secao-titulo" id="secao-historico">
 					Concluídas em {formatarMes(new Date(ano, mes, 1))}

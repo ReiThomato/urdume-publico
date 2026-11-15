@@ -2,11 +2,15 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from '@/app/router'
 import { buscar, normalizar } from '@/db/repo'
 import type { ResultadoBusca } from '@/db/repo'
+import type { Evento } from '@/db/db'
+import { db } from '@/db/db'
+import { EditarEvento } from '@/ui/EditarEvento'
 import { Folha } from '@/ui/Folha'
 import {
 	IconeBuscar,
 	IconeCalendario,
 	IconeConcluido,
+	IconeDescricao,
 	IconeHorario,
 	IconePasta,
 } from '@/ui/icones'
@@ -14,6 +18,7 @@ import {
 const ICONES = {
 	tarefa: IconeConcluido,
 	projeto: IconePasta,
+	pagina: IconeDescricao,
 	lembrete: IconeHorario,
 	evento: IconeCalendario,
 } as const
@@ -27,7 +32,7 @@ const ROTULOS = {
 
 const ORDEM: Array<ResultadoBusca['tipo']> = ['tarefa', 'evento', 'projeto', 'lembrete']
 
-export interface BuscaProps {
+interface BuscaProps {
 	aberta: boolean
 	onFechar: () => void
 }
@@ -35,8 +40,8 @@ export interface BuscaProps {
 /**
  * Busca do topo do Início.
  *
- * Procura em tarefas, subtarefas, listas, páginas (inclusive dentro do desenho)
- * e lembretes, ignorando acentos e maiúsculas. Resultado agrupado por tipo;
+ * Procura em tarefas, subtarefas, projetos, eventos e lembretes, ignorando
+ * acentos e maiúsculas. Resultado agrupado por tipo;
  * tocar abre o item.
  */
 export function Busca({ aberta, onFechar }: BuscaProps) {
@@ -44,6 +49,14 @@ export function Busca({ aberta, onFechar }: BuscaProps) {
 	const [consulta, setConsulta] = useState('')
 	const [resultados, setResultados] = useState<ResultadoBusca[]>([])
 	const [procurando, setProcurando] = useState(false)
+	/**
+	 * Evento aberto a partir de um resultado.
+	 *
+	 * Antes a busca levava ao dia na Agenda, e o usuário ainda precisava achar
+	 * a linha na régua para editar (D7). Agora o resultado abre o próprio
+	 * editor — o mesmo componente de todas as telas.
+	 */
+	const [eventoAberto, setEventoAberto] = useState<Evento | null>(null)
 
 	useEffect(() => {
 		if (!aberta) {
@@ -92,25 +105,49 @@ export function Busca({ aberta, onFechar }: BuscaProps) {
 	}, [resultados])
 
 	function abrir(item: ResultadoBusca): void {
-		onFechar()
 		switch (item.tipo) {
 			case 'tarefa':
+				onFechar()
 				navigate(item.dia ? { name: 'calendario', day: item.dia } : { name: 'tarefas' })
 				break
 			case 'projeto':
+				onFechar()
 				navigate({ name: 'projeto', id: item.id })
 				break
 			case 'evento':
-				navigate(item.dia ? { name: 'calendario', day: item.dia } : { name: 'calendario' })
+				// Abre o evento, não o dia: era um toque a mais para chegar na
+				// mesma folha de edição.
+				void abrirEvento(item.id)
 				break
 			case 'lembrete':
+				onFechar()
 				navigate({ name: 'inicio' })
 				break
 		}
 	}
 
+	/**
+	 * Busca o evento pelo id e abre o editor.
+	 *
+	 * A busca devolve o id-base (`ResultadoBusca.id`), então a ocorrência
+	 * recorrente é editada como o evento inteiro — igual à Agenda.
+	 */
+	async function abrirEvento(id: string): Promise<void> {
+		const evento = await db.events.get(id)
+		if (!evento || evento.deletedAt) {
+			// Evento apagado desde a busca: cai no caminho antigo, que ainda é
+			// melhor que não fazer nada.
+			onFechar()
+			navigate({ name: 'calendario' })
+			return
+		}
+		onFechar()
+		setEventoAberto(evento)
+	}
+
 	return (
-		<Folha titulo="Buscar" sobre="Tarefas, listas, páginas e lembretes" aberta={aberta} onFechar={onFechar}>
+		<>
+			<Folha titulo="Buscar" sobre="Tarefas, projetos, eventos e lembretes" aberta={aberta} onFechar={onFechar}>
 			<div className="busca__campo">
 				<span className="botao-icone" aria-hidden="true" style={{ pointerEvents: 'none' }}>
 					<IconeBuscar size={22} />
@@ -131,8 +168,8 @@ export function Busca({ aberta, onFechar }: BuscaProps) {
 
 			{consulta.trim().length < 2 ? (
 				<p className="nota" style={{ padding: 'var(--s-2) var(--s-5) var(--s-6)' }}>
-					Digite pelo menos duas letras. A busca ignora acentos e maiúsculas e também encontra
-					texto dentro dos desenhos.
+					Digite pelo menos duas letras. A busca ignora acentos e maiúsculas e procura em
+					tarefas, subtarefas, projetos, eventos e lembretes.
 				</p>
 			) : procurando && grupos.length === 0 ? (
 				<p className="nota" style={{ padding: 'var(--s-2) var(--s-5) var(--s-6)' }}>
@@ -172,6 +209,9 @@ export function Busca({ aberta, onFechar }: BuscaProps) {
 					)
 				})
 			)}
-		</Folha>
+			</Folha>
+
+			<EditarEvento evento={eventoAberto} onFechar={() => setEventoAberto(null)} />
+		</>
 	)
 }

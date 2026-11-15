@@ -1,19 +1,19 @@
-import {
-	Hct,
-	SchemeContent,
-	SchemeExpressive,
-	SchemeFidelity,
-	SchemeFruitSalad,
-	SchemeMonochrome,
-	SchemeNeutral,
-	SchemeRainbow,
-	SchemeTonalSpot,
-	SchemeVibrant,
-	TonalPalette,
-} from '@material/material-color-utilities'
+import { Hct, SchemeTonalSpot, TonalPalette } from '@material/material-color-utilities'
 import type { DynamicScheme } from '@material/material-color-utilities'
 import { useEffect, useMemo, useState } from 'react'
+import {
+	cromaDoAcento,
+	cromaDaFamilia,
+	ehIntima,
+	formacaoEmHex,
+	matizDaFamilia,
+	perfilDe,
+	raioDoCroma,
+	raioDoTom,
+} from '@/app/motor-cromatico'
+import type { Deslocamentos, Harmonia, TipoDeRoda } from '@/app/motor-cromatico'
 import { setSetting, useSetting } from '@/db/repo'
+import { CHAVES, gravarChave, lerChave } from '@/lib/chaves'
 
 /**
  * Tema do app — mesma engenharia do Grit.
@@ -23,46 +23,67 @@ import { setSetting, useSetting } from '@/db/repo'
  * inteiro de forma coerente; nada de cores soltas escolhidas à mão que brigam
  * entre si. O modo claro/escuro é um esquema diferente da mesma semente, não uma
  * lista de exceções.
+ *
+ * ## O que mudou na rodada 18
+ *
+ * O "estilo da paleta" (oito esquemas Material) saiu: ele prometia oito
+ * resultados e entregava um. No lugar entraram três controles que fazem
+ * trabalho visível e testável:
+ *
+ * - **tipo de roda** (`tipo`): a força e o tom da paleta — cromática, viva,
+ *   suave, pastel, sóbria ou neutra;
+ * - **harmonia** (`harmonia`): a relação de matiz entre acento, secundária e
+ *   terciária;
+ * - **deslocamentos**: o ajuste fino de cada pino derivado, arrastado à mão.
+ *
+ * `estilo` continua no tipo, como campo legado: registros antigos têm o valor e
+ * ele é lido sem quebrar — mas não influencia mais nada. Migrar dado de usuário
+ * para "apagar" uma preferência é risco desnecessário.
  */
 export type ModoTema = 'system' | 'light' | 'dark'
 
-export type EstiloPaleta =
-	| 'tonal'
-	| 'neutro'
-	| 'vibrante'
-	| 'expressivo'
-	| 'arco-iris'
-	| 'frutas'
-	| 'monocromatico'
-	| 'fidelidade'
-	| 'conteudo'
+/** Esquema Material legado. Lido em registros antigos; não é mais aplicado. */
+export type EstiloPaleta = 'tonal' | 'neutro' | 'vibrante' | 'expressivo' | 'frutas' | 'monocromatico' | 'fidelidade' | 'conteudo'
 
 export type FonteApp = 'figtree' | 'archivo' | 'inter' | 'manrope' | 'sistema'
 
-/**
- * Tema do quadro (tldraw). Independente do tema do app: dá para manter o app
- * escuro e o quadro claro, ou o contrário. `app` acompanha o app.
- */
 export interface PreferenciasTema {
 	modo: ModoTema
 	/** Preto puro nos fundos (economiza bateria em OLED). */
 	amoled: boolean
 	/** Cor-semente em hex, ex. "#d96c47". */
 	semente: string
-	estilo: EstiloPaleta
+	/** Tipo de roda: define a força e o tom da paleta inteira. */
+	tipo: TipoDeRoda
+	/** Harmonia entre as famílias. `intima` = as do esquema Material. */
+	harmonia: Harmonia
+	/** Ajuste fino de cada pino derivado, em graus. */
+	deslocamentos: Deslocamentos
+	/**
+	 * Esquema Material legado. Existe só para ler `tema.v3` de versões
+	 * anteriores sem perder o registro; não é aplicado em lugar nenhum.
+	 */
+	estilo?: EstiloPaleta
 	fonte: FonteApp
-	/** Tema do quadro, escolhido à parte do app. */
 }
 
 export const TEMA_PADRAO: PreferenciasTema = {
 	modo: 'system',
 	amoled: false,
 	semente: '#d96c47',
+	tipo: 'cromatica',
+	harmonia: 'intima',
+	deslocamentos: {},
 	estilo: 'tonal',
 	fonte: 'figtree',
 }
 
-/** Sementes oferecidas em Ajustes: nomes em português, cor fixa. */
+/**
+ * Sementes oferecidas em Ajustes.
+ *
+ * Entraram o cinza, o carvão e o gesso: com a roda neutra e os tipos suaves, o
+ * ponto de partida sem cor é uma escolha legítima, não um acidente.
+ */
 export const SEMENTES: Array<{ hex: string; nome: string }> = [
 	{ hex: '#d96c47', nome: 'Terracota' },
 	{ hex: '#e8623f', nome: 'Coral' },
@@ -73,6 +94,8 @@ export const SEMENTES: Array<{ hex: string; nome: string }> = [
 	{ hex: '#7d5cc6', nome: 'Violeta' },
 	{ hex: '#c2557f', nome: 'Rosa' },
 	{ hex: '#6f6a63', nome: 'Pedra' },
+	{ hex: '#3a3a3c', nome: 'Carvão' },
+	{ hex: '#cfc9bd', nome: 'Gesso' },
 ]
 
 export const FONTES: Array<{ valor: FonteApp; nome: string; pilha: string }> = [
@@ -83,17 +106,6 @@ export const FONTES: Array<{ valor: FonteApp; nome: string; pilha: string }> = [
 	{ valor: 'sistema', nome: 'Do aparelho', pilha: 'system-ui, -apple-system, Roboto, sans-serif' },
 ]
 
-const ESQUEMAS = {
-	tonal: SchemeTonalSpot,
-	neutro: SchemeNeutral,
-	vibrante: SchemeVibrant,
-	expressivo: SchemeExpressive,
-	'arco-iris': SchemeRainbow,
-	frutas: SchemeFruitSalad,
-	monocromatico: SchemeMonochrome,
-	fidelidade: SchemeFidelity,
-	conteudo: SchemeContent,
-} as const
 
 /** Paletas do esquema que viram variáveis CSS (nome Material → nome da var). */
 const CORES = [
@@ -105,6 +117,12 @@ const CORES = [
 	'primaryFixedDim',
 	'onPrimaryFixed',
 	'inversePrimary',
+	/*
+	 * `onAccent` não vem do esquema: é calculado no fim, depois que as
+	 * superfícies existem. Entra na lista para virar `--on-accent` como os
+	 * outros — o CSS lê esse nome há várias rodadas.
+	 */
+	'onAccent',
 	'secondary',
 	'onSecondary',
 	'secondaryContainer',
@@ -144,42 +162,62 @@ const CORES = [
  *
  * As propriedades do `DynamicScheme` são getters calculados, não campos
  * graváveis: por isso o AMOLED é aplicado numa cópia, e não mutando o objeto.
+ *
+ * ## Ordem das decisões (importa para não haver conflito)
+ *
+ * 1. O ESQUEMA Material (sempre Tonal Spot) fornece o esqueleto inteiro:
+ *    superfícies, contornos, erro e os pares de contraste.
+ * 2. O MOTOR define matiz e croma de cada família — tipo de roda e harmonia.
+ * 3. Os PORTÕES deste arquivo (`tomDoAcento`, `tomDaFamilia`) decidem o tom e
+ *    garantem 4,5:1. Nenhuma etapa anterior pode pular esta.
+ *
+ * É por isso que uma harmonia exótica ou uma roda pastel não conseguem gerar
+ * botão ilegível: elas não escolhem tom.
  */
 export function coresDoEsquema(prefs: PreferenciasTema, escuro: boolean): Record<string, number> {
-	const Construtor = ESQUEMAS[prefs.estilo] ?? SchemeTonalSpot
+	// Cache de uma posição: o arraste da roda chama isto a cada dedo movido, e
+	// cada cálculo completo custa ~7,5 ms no aparelho. Com o cache, a mesma
+	// semente não é recalculada duas vezes seguidas (o React às vezes reavalia
+	// `useMemo` por identidade de objeto sem que o valor tenha mudado).
+	const chaveCache = [
+		prefs.semente,
+		prefs.tipo,
+		prefs.harmonia,
+		prefs.deslocamentos?.secundaria ?? '',
+		prefs.deslocamentos?.terciaria ?? '',
+		prefs.amoled ? 'a' : '',
+		escuro ? 'e' : 'c',
+	].join('|')
+
+	if (cacheCores && cacheChave === chaveCache) return cacheCores
+
 	const semente = Hct.fromInt(Number.parseInt(prefs.semente.replace('#', ''), 16) | 0xff000000)
-	const esquema: DynamicScheme = new Construtor(semente, escuro, 0)
+	const esquema: DynamicScheme = new SchemeTonalSpot(semente, escuro, 0)
 	const cores: Record<string, number> = {}
 
+	// O esquema entrega o esqueleto. Só as chaves abaixo são sobrescritas.
 	for (const chave of CORES) {
 		const valor = esquema[chave as keyof DynamicScheme]
 		if (typeof valor === 'number') cores[chave] = valor
 	}
 
-	// O acento principal mantém a cor que o usuário escolheu.
-	//
-	// Todos os esquemas Material constroem o primário num croma fixo (~36). Numa
-	// semente forte isso apagava a escolha: #FF00FF (magenta) saía #F1B3E6, um
-	// rosa pálido quase igual ao da paleta pronta — a "nova cor" parecia não ter
-	// efeito nenhum. Aqui o primário nasce da MESMA matiz, mas com o croma da
-	// semente (limitado ao que aquele tom consegue exibir).
-	//
-	// O tom também acompanha a semente. Antes era fixo (40 no claro, 80 no
-	// escuro): uma cor clara ou viva — amarelo, verde-limão, ciano — saía sempre
-	// num tom escuro, e o usuário via "outra cor" em vez da que digitou. Agora o
-	// tom é o da própria cor, preso a uma faixa em que texto branco ou preto
-	// atinge 4,5:1; quando o tom exato não alcança, anda o mínimo necessário.
-	const acento = TonalPalette.fromHueAndChroma(
-		semente.hue,
-		// Semente já colorida: mantém a força dela. Semente cinza ("Pedra"): fica
-		// cinza mesmo — elevar o croma de 4 para 12 transformava o cinza num bege
-		// que o usuário não pediu.
-		semente.chroma < 12 ? semente.chroma : Math.max(semente.chroma, 16),
-	)
+	const perfil = perfilDe(prefs.tipo)
 
+	/*
+	 * Acento (família primária).
+	 *
+	 * Todos os esquemas Material constroem o primário num croma fixo (~36). Numa
+	 * semente forte isso apagava a escolha: #FF00FF (magenta) saía #F1B3E6, um
+	 * rosa pálido quase igual ao da paleta pronta — a "nova cor" parecia não ter
+	 * efeito nenhum.
+	 *
+	 * Agora o croma vem do TIPO de roda (é ele que decide "viva" x "suave" x
+	 * "neutra") e o tom vem da própria semente, preso a uma faixa legível.
+	 */
+	const cromaAcento = cromaDoAcento(prefs.tipo, semente.chroma)
+	const acento = TonalPalette.fromHueAndChroma(semente.hue, cromaAcento)
 	const claro = tomDoAcento(acento, semente.tone, escuro ? [74, 86] : [40, 62])
-	const tomDoContainer: [number, number] = escuro ? [24, 36] : [86, 94]
-	const container = tomDoContainerDoAcento(acento, tomDoContainer)
+	const container = tomDoContainerDoAcento(acento, escuro ? [24, 36] : [86, 94])
 
 	cores.primary = claro.cor
 	cores.onPrimary = claro.texto
@@ -190,21 +228,73 @@ export function coresDoEsquema(prefs: PreferenciasTema, escuro: boolean): Record
 	cores.onPrimaryFixed = acento.tone(10)
 	cores.inversePrimary = acento.tone(escuro ? 40 : 80)
 
-	// Secundário e terciário partem da mesma semente, com croma baixo. Sem isso
-	// o "estilo da paleta" (Tonal, Vibrante, Frutas…) era a única coisa que
-	// mexia neles, e trocar a cor parecia mudar só os botões.
-	cores.secondary = acento.tone(escuro ? 80 : 40)
-	cores.onSecondary = acento.tone(escuro ? 20 : 100)
-	cores.secondaryContainer = acento.tone(escuro ? 30 : 90)
-	cores.onSecondaryContainer = acento.tone(escuro ? 90 : 10)
-	cores.tertiary = acento.tone(escuro ? 80 : 40)
-	cores.onTertiary = acento.tone(escuro ? 20 : 100)
-	cores.tertiaryContainer = acento.tone(escuro ? 30 : 90)
-	cores.onTertiaryContainer = acento.tone(escuro ? 90 : 10)
+	/*
+	 * Secundária e terciária.
+	 *
+	 * `intima` mantém o comportamento histórico: as famílias vêm do esquema
+	 * Material, e a paleta de quem nunca abriu esta tela não muda.
+	 *
+	 * Com uma harmonia explícita, a matiz de cada família vem do MOTOR e o tom é
+	 * resolvido aqui, na mesma faixa do acento, com o texto tirado por contraste
+	 * real. Antes o código sobrescrevia as duas famílias com a matiz da semente:
+	 * era a origem do "estilo que não faz nada".
+	 */
+	if (ehIntima(prefs.harmonia)) {
+		cores.secondary = esquema.secondary
+		cores.onSecondary = esquema.onSecondary
+		cores.secondaryContainer = esquema.secondaryContainer
+		cores.onSecondaryContainer = esquema.onSecondaryContainer
+		cores.tertiary = esquema.tertiary
+		cores.onTertiary = esquema.onTertiary
+		cores.tertiaryContainer = esquema.tertiaryContainer
+		cores.onTertiaryContainer = esquema.onTertiaryContainer
+	} else {
+		const cromaApoio = cromaDaFamilia(prefs.tipo, semente.chroma, prefs.harmonia)
+		const familia = (
+			matiz: number,
+			tomContorno: [number, number],
+			tomContainer: [number, number],
+		): {
+			cor: number
+			texto: number
+			container: number
+			textoDoContainer: number
+		} => {
+			const paleta = TonalPalette.fromHueAndChroma(matiz, cromaApoio)
+			const acentoDaFamilia = tomDoAcento(paleta, perfil.tomDoDisco, tomContorno)
+			const caixa = tomDoContainerDoAcento(paleta, tomContainer)
+			return {
+				cor: acentoDaFamilia.cor,
+				texto: acentoDaFamilia.texto,
+				container: caixa.cor,
+				textoDoContainer: caixa.texto,
+			}
+		}
+
+		const secundaria = familia(
+			matizDaFamilia('secundaria', semente.hue, prefs.harmonia, prefs.deslocamentos),
+			escuro ? [70, 86] : [34, 50],
+			escuro ? [22, 34] : [88, 94],
+		)
+		cores.secondary = secundaria.cor
+		cores.onSecondary = secundaria.texto
+		cores.secondaryContainer = secundaria.container
+		cores.onSecondaryContainer = secundaria.textoDoContainer
+
+		const terciaria = familia(
+			matizDaFamilia('terciaria', semente.hue, prefs.harmonia, prefs.deslocamentos),
+			escuro ? [70, 86] : [34, 50],
+			escuro ? [22, 34] : [88, 94],
+		)
+		cores.tertiary = terciaria.cor
+		cores.onTertiary = terciaria.texto
+		cores.tertiaryContainer = terciaria.container
+		cores.onTertiaryContainer = terciaria.textoDoContainer
+	}
 
 	// Superfícies e texto vêm dos neutros suaves (ver `neutrosSuaves`), para o
 	// app não virar um bloco único da cor-semente.
-	Object.assign(cores, neutrosSuaves(semente, escuro))
+	Object.assign(cores, neutrosSuaves(semente, escuro, prefs.tipo))
 
 	if (prefs.amoled && escuro) {
 		// AMOLED: fundo preto de verdade. Os containers sobem em degraus de cinza
@@ -218,12 +308,89 @@ export function coresDoEsquema(prefs: PreferenciasTema, escuro: boolean): Record
 		cores.surfaceContainerHigh = 0xff1a1a1a
 		cores.surfaceContainerHighest = 0xff242424
 		cores.surfaceVariant = 0xff262626
-		cores.outlineVariant = 0xff2e2e2e
-		cores.outline = 0xff8d8d8d
+		// Contornos acima do tom 30 são o mínimo para a borda existir sobre o
+		// preto puro: em 0x2e2e2e ela media 1,4:1 e os cartões perdiam a
+		// delimitação justamente no modo que promete a melhor tela.
+		cores.outlineVariant = 0xff3a3a3a
+		cores.outline = 0xff9a9a9a
 	}
 
+	/*
+	 * Tinta de texto do acento (`--on-accent`).
+	 *
+	 * `--primary` como LETRA sobre superfície reprova (2,6–3,2:1): ele foi
+	 * desenhado para ser FUNDO de botão. O token antigo era uma mistura fixa
+	 * de 50% do acento com a tinta do tema, e funcionava nas nove sementes
+	 * daquela época. Com os tipos de roda e a harmonia, o acento pode ser
+	 * muito mais claro ou mais escuro, e uma mistura fixa deixou de garantir
+	 * o mínimo — a roda "Viva" em escuro dava 4,41:1 num dos cards.
+	 *
+	 * Aqui a mistura ANDA até passar: parte do acento e vai na direção da
+	 * tinta do tema, em passos de 5%, até que TODAS as superfícies de texto
+	 * alcancem 4,5:1. Nenhuma combinação de tipo, harmonia ou semente
+	 * consegue furar esse portão, porque ele não depende de escolha.
+	 */
+	cores.onAccent = tintaDoAcento(
+		cores.primary!,
+		escuro ? 0xffece0dd : 0xff221c1b,
+		[
+			cores.background!,
+			cores.surfaceContainer!,
+			cores.surfaceContainerHigh!,
+			cores.surfaceContainerHighest!,
+			cores.primaryContainer!,
+		],
+		4.5,
+	)
+
+	cacheChave = chaveCache
+	cacheCores = cores
 	return cores
 }
+
+/**
+ * Tinta legível do acento: a mesma matiz, um degrau na direção da tinta do
+ * tema, até passar 4,5:1 sobre todas as superfícies informadas.
+ *
+ * Devolve o primeiro passo que passa; se nenhum passar (impossível com essas
+ * superfícies), devolve a tinta do tema — que, por definição, é legível.
+ */
+function tintaDoAcento(
+	acento: number,
+	tinta: number,
+	superficies: number[],
+	minimo: number,
+): number {
+	for (let passo = 0; passo <= 20; passo++) {
+		const peso = passo / 20
+		const mistura = misturarArgb(acento, tinta, 0.5 + peso * 0.5)
+		if (superficies.every((superficie) => contraste(mistura, superficie) >= minimo)) {
+			return mistura
+		}
+	}
+	return tinta
+}
+
+/** Mistura dois ARGB em sRGB, como `color-mix(in srgb, a p%, b)`. */
+function misturarArgb(a: number, b: number, peso: number): number {
+	const canal = (deslocamento: number): number => {
+		const va = (a >> deslocamento) & 255
+		const vb = (b >> deslocamento) & 255
+		return Math.round(va * peso + vb * (1 - peso))
+	}
+	return 0xff000000 | (canal(16) << 16) | (canal(8) << 8) | canal(0)
+}
+
+/**
+ * Cache de uma posição do esquema.
+ *
+ * Existe por medição: um cálculo completo custa ~7,5 ms no aparelho. A roda
+ * chama isto a cada movimento do dedo; 60 quadros por segundo dam-se em 16 ms,
+ * então o cálculo sozinho comia metade do quadro e o arraste parecia "travado".
+ * Com o cache, só há cálculo quando algum parâmetro realmente mudou.
+ */
+let cacheChave = ''
+let cacheCores: Record<string, number> | null = null
 
 function hex(argb: number): string {
 	return `#${(argb & 0xffffff).toString(16).padStart(6, '0')}`
@@ -302,9 +469,17 @@ function tomDoContainerDoAcento(
  * chip) param de se distinguir. Aqui os neutros são recalculados com croma 3–7:
  * o papel continua levemente tingido, mas cada camada tem degrau próprio — e o
  * acento segue saturado, que é o que dá personalidade.
- */function neutrosSuaves(semente: Hct, escuro: boolean): Record<string, number> {
-	const neutro = TonalPalette.fromHueAndChroma(semente.hue, 3.5)
-	const variante = TonalPalette.fromHueAndChroma(semente.hue, 7)
+ *
+ * O TIPO de roda manda no tingimento: numa roda neutra (preto e branco) as
+ * superfícies ficam cinza de verdade, sem nenhum resto de cor. Sem isso, "sem
+ * cor" ainda saía com um bege rosado nas bordas — o tipo não cumpria o nome.
+ */
+function neutrosSuaves(semente: Hct, escuro: boolean, tipo?: TipoDeRoda | null): Record<string, number> {
+	const perfil = perfilDe(tipo)
+	const cromaNeutro = (perfil.cromaNeutro ?? 3.5) * 1
+	const cromaVariante = cromaNeutro * 2
+	const neutro = TonalPalette.fromHueAndChroma(semente.hue, cromaNeutro)
+	const variante = TonalPalette.fromHueAndChroma(semente.hue, cromaVariante)
 
 	const tom = (paleta: TonalPalette, t: number): number => paleta.tone(t)
 
@@ -363,6 +538,7 @@ export function temaResolvido(modo?: ModoTema): 'light' | 'dark' {
 	return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+
 /**
  * Tema do app já resolvido, como estado reativo.
  *
@@ -387,19 +563,35 @@ export function useTemaResolvido(prefs: PreferenciasTema): 'light' | 'dark' {
 }
 
 /** Escreve as variáveis do esquema no elemento raiz. */
-export function aplicarTema(prefs: PreferenciasTema): void {
+/**
+ * Escreve as variáveis do esquema no elemento raiz.
+ *
+ * `leve` existe por causa do arraste da roda: durante o gesto, o app inteiro é
+ * repintado a cada movimento. Gravar o espelho em `localStorage` e mexer em
+ * classes a cada dedo movido custava mais que o próprio cálculo, e o arraste
+ * ficava a 20–30 quadros por segundo. No modo leve só as variáveis são
+ * escritas — o espelho e as classes ficam para o fim do gesto.
+ *
+ * `alvo` restringe a pintura a UM elemento. É o que torna o arraste fluido: em
+ * vez de invalidar 60 variáveis no `<html>` (e obrigar o navegador a recalcular
+ * estilo e pintar o documento inteiro, ~58 ms por quadro), a prévia se aplica
+ * só na folha que está na frente. O app por trás está coberto pela folha; ele
+ * recebe o tema final quando o dedo sai.
+ */
+export function aplicarTema(
+	prefs: PreferenciasTema,
+	opcoes?: { leve?: boolean; alvo?: HTMLElement | null },
+): void {
 	const raiz = document.documentElement
+	const leve = opcoes?.leve === true
+	const alvo = opcoes?.alvo ?? raiz
 
 	// Espelho síncrono do tema: o banco (IndexedDB) abre depois do primeiro
 	// desenho — sem espelho, o app nascia na cor antiga/padrão e "piscava"
 	// para o tema certo logo em seguida. localStorage é lido antes do render.
 	// Grava as variáveis JÁ RESOLVIDAS: o script inline do index.html as aplica
 	// antes da primeira pintura, sem esperar React nem banco.
-	try {
-		localStorage.setItem(CHAVE_ESPELHO, JSON.stringify(prefs))
-	} catch {
-		// Sem localStorage (modo privado): segue sem espelho.
-	}
+	if (!leve) gravarChave(CHAVE_ESPELHO, JSON.stringify(prefs))
 
 	const escuro = temaResolvido(prefs.modo) === 'dark'
 	const esquema = coresDoEsquema(prefs, escuro)
@@ -409,8 +601,10 @@ export function aplicarTema(prefs: PreferenciasTema): void {
 		cores[nomeDaVar(chave)] = hex(valor)
 	}
 
-	try {
-		localStorage.setItem(
+	Object.assign(cores, variaveisDoMotor(prefs))
+
+	if (!leve) {
+		gravarChave(
 			CHAVE_CORES,
 			JSON.stringify({
 				...cores,
@@ -419,35 +613,78 @@ export function aplicarTema(prefs: PreferenciasTema): void {
 				escuro: escuro ? 'dark' : 'light',
 			}),
 		)
-		// Migração: a chave antiga é lida pelo script do index.html na primeira
-		// abertura após a troca de nome, e depois pode sair do aparelho.
-		localStorage.removeItem(CHAVE_CORES_ANTIGA)
-	} catch {
-		// Sem localStorage: o tema ainda é aplicado no DOM abaixo.
-	}
 
-	// Transições de cor em dezenas de elementos disparavam juntas na troca de
-	// tema e viravam "bugs visuais". Uma moldura sem transições troca limpo.
-	raiz.classList.add('tema-trocando')
-	requestAnimationFrame(() => {
-		requestAnimationFrame(() => raiz.classList.remove('tema-trocando'))
-	})
+		// Transições de cor em dezenas de elementos disparavam juntas na troca de
+		// tema e viravam "bugs visuais". Uma moldura sem transições troca limpo.
+		raiz.classList.add('tema-trocando')
+		requestAnimationFrame(() => {
+			requestAnimationFrame(() => raiz.classList.remove('tema-trocando'))
+		})
+	}
 
 	for (const [chave, valor] of Object.entries(cores)) {
-		raiz.style.setProperty(chave, valor)
+		alvo.style.setProperty(chave, valor)
 	}
 
-	const fonte = FONTES.find((f) => f.valor === prefs.fonte) ?? FONTES[0]!
-	raiz.style.setProperty('--font', fonte.pilha)
+	if (!leve) {
+		const fonte = FONTES.find((f) => f.valor === prefs.fonte) ?? FONTES[0]!
+		raiz.style.setProperty('--font', fonte.pilha)
+	}
 
-	raiz.dataset.modo = prefs.modo
-	raiz.dataset.tema = escuro ? 'dark' : 'light'
-	raiz.dataset.amoled = prefs.amoled ? 'sim' : 'nao'
-	raiz.style.colorScheme = escuro ? 'dark' : 'light'
+	// Os atributos de tema são do documento: com um `alvo` escopado, quem manda
+	// neles é a aplicação global, que acontece no fim do gesto.
+	if (alvo === raiz) {
+		raiz.dataset.modo = prefs.modo
+		raiz.dataset.tema = escuro ? 'dark' : 'light'
+		raiz.dataset.amoled = prefs.amoled ? 'sim' : 'nao'
+		raiz.style.colorScheme = escuro ? 'dark' : 'light'
 
-	document
-		.querySelector('meta[name="theme-color"]')
-		?.setAttribute('content', hex(esquema.surface ?? 0xffffffff))
+		if (!leve) {
+			document
+				.querySelector('meta[name="theme-color"]')
+				?.setAttribute('content', hex(esquema.surface ?? 0xffffffff))
+		}
+	}
+}
+
+/**
+ * Variáveis do motor cromático, para a roda e para os chips.
+ *
+ * A roda precisa saber onde cada pino fica; ela lê daqui em vez de repetir a
+ * conta. Ficam em variáveis CSS (e não em props) porque quem desenha é o CSS,
+ * e assim a roda continua sendo um componente só, sem estado duplicado.
+ */
+function variaveisDoMotor(prefs: PreferenciasTema): Record<string, string> {
+	const perfil = perfilDe(prefs.tipo)
+	const semente = Hct.fromInt(Number.parseInt(prefs.semente.replace('#', ''), 16) | 0xff000000)
+	const cromaAcento = cromaDoAcento(prefs.tipo, semente.chroma)
+	const cromaApoio = cromaDaFamilia(prefs.tipo, semente.chroma, prefs.harmonia)
+	const pontos = formacaoEmHex(
+		semente.hue,
+		semente.chroma,
+		prefs.tipo,
+		prefs.harmonia,
+		prefs.deslocamentos,
+	)
+
+	const raio = perfil.eixo === 'tom' ? raioDoTom(prefs.tipo, semente.tone) : raioDoCroma(prefs.tipo, cromaAcento)
+	const raioApoio = perfil.eixo === 'tom' ? 0.72 : raioDoCroma(prefs.tipo, cromaApoio)
+
+	return {
+		'--motor-primaria': pontos.primaria,
+		'--motor-secundaria': pontos.secundaria,
+		'--motor-terciaria': pontos.terciaria,
+		'--motor-hue-semente': String(Math.round(semente.hue)),
+		'--motor-hue-secundaria': String(
+			Math.round(matizDaFamilia('secundaria', semente.hue, prefs.harmonia, prefs.deslocamentos)),
+		),
+		'--motor-hue-terciaria': String(
+			Math.round(matizDaFamilia('terciaria', semente.hue, prefs.harmonia, prefs.deslocamentos)),
+		),
+		'--motor-raio-semente': String(Number(raio.toFixed(3))),
+		'--motor-raio-apoio': String(Number(raioApoio.toFixed(3))),
+		'--motor-croma-max': String(perfil.cromaMax),
+	}
 }
 
 /**
@@ -463,10 +700,7 @@ export function useTema(): PreferenciasTema {
 	// `undefined` e o tema cairia no PADRÃO, sobrescrevendo o espelho que já
 	// pintou a tela — era exatamente a "cor antiga que aparece e depois
 	// corrige". Enquanto o banco não responde, vale o espelho síncrono.
-	const prefs = useMemo(
-		() => (salvo ? { ...TEMA_PADRAO, ...salvo } : lerEspelho()),
-		[salvo],
-	)
+	const prefs = useMemo(() => normalizarPreferencias(salvo), [salvo])
 
 	useEffect(() => {
 		aplicarTema(prefs)
@@ -478,37 +712,56 @@ export function useTema(): PreferenciasTema {
 		consulta.addEventListener('change', aoMudar)
 		return () => consulta.removeEventListener('change', aoMudar)
 		// A lista de campos evita reaplicar o tema por identidade do objeto.
-	}, [prefs.modo, prefs.amoled, prefs.semente, prefs.estilo, prefs.fonte])
+	}, [
+		prefs.modo,
+		prefs.amoled,
+		prefs.semente,
+		prefs.tipo,
+		prefs.harmonia,
+		prefs.deslocamentos.secundaria,
+		prefs.deslocamentos.terciaria,
+		prefs.fonte,
+	])
 
 	return prefs
 }
 
-export async function salvarTema(patch: Partial<PreferenciasTema>): Promise<void> {
-	const atual = await import('@/db/repo').then((m) => m.getSetting<PreferenciasTema>('tema.v3', TEMA_PADRAO))
-	await setSetting('tema.v3', { ...TEMA_PADRAO, ...atual, ...patch })
+/**
+ * Preferências sempre completas.
+ *
+ * `tema.v3` de versões anteriores não tem `tipo`, `harmonia` nem
+ * `deslocamentos`. Mesclar com o padrão devolve um objeto utilizável, e o valor
+ * ausente vira exatamente o comportamento antigo — sem migração de banco, sem
+ * reescrever o registro do usuário.
+ */
+function normalizarPreferencias(salvo: Partial<PreferenciasTema> | undefined | null): PreferenciasTema {
+	if (!salvo) return lerEspelho()
+	return {
+		...TEMA_PADRAO,
+		...salvo,
+		deslocamentos: salvo.deslocamentos ?? {},
+	}
 }
 
-/** Chave do espelho síncrono do tema em localStorage. */
-const CHAVE_ESPELHO = 'nexo.tema'
+export async function salvarTema(patch: Partial<PreferenciasTema>): Promise<void> {
+	const atual = await import('@/db/repo').then((m) => m.getSetting<PreferenciasTema>('tema.v3', TEMA_PADRAO))
+	await setSetting('tema.v3', normalizarPreferencias({ ...atual, ...patch }))
+}
+
+/** Chave do espelho síncrono do tema em localStorage (ver `lib/chaves`). */
+const CHAVE_ESPELHO = CHAVES.espelhoDoTema
 
 /** Chave das variáveis CSS já resolvidas, lidas pelo script do index.html. */
-const CHAVE_CORES = 'urdume.tema.cores'
+const CHAVE_CORES = CHAVES.coresDoTema
 
-/**
- * Chave antiga das variáveis resolvidas, de quando o app se chamava Rabisco.
- *
- * O script do index.html lê as duas: sem isso, a primeira abertura depois da
- * troca de nome não acharia o espelho e pintaria na cor padrão antes de
- * corrigir — exatamente a piscada que o tema síncrono existe para evitar.
- */
-const CHAVE_CORES_ANTIGA = 'rabisco.tema.cores'
 
 /** Preferências do espelho, mescladas com o padrão. Síncrono, sem banco. */
 function lerEspelho(): PreferenciasTema {
 	try {
-		const bruto = localStorage.getItem(CHAVE_ESPELHO)
+		const bruto = lerChave(CHAVE_ESPELHO)
 		if (!bruto) return TEMA_PADRAO
-		return { ...TEMA_PADRAO, ...(JSON.parse(bruto) as Partial<PreferenciasTema>) }
+		const salvo = JSON.parse(bruto) as Partial<PreferenciasTema>
+		return { ...TEMA_PADRAO, ...salvo, deslocamentos: salvo.deslocamentos ?? {} }
 	} catch {
 		return TEMA_PADRAO
 	}

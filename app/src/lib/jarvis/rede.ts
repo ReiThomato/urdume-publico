@@ -54,18 +54,3 @@ export function estaOnline(): boolean {
 	if (typeof navigator === 'undefined') return true
 	return navigator.onLine
 }
-
-/**
- * Erro que merece fila, em vez de "deu erro".
- *
- * Falha de rede, tempo esgotado e 5xx são transitórios: o pedido continua
- * válido. 401 é chave errada — enfileirar não resolve e só confunde.
- */
-export function erroTransitorio(status: number | null, mensagem: string | null): boolean {
-	if (!estaOnline()) return true
-	if (status == null) return true
-	if (status >= 500) return true
-
-	const texto = (mensagem ?? '').toLowerCase()
-	return /network|fetch|timeout|abort|failed to fetch|load failed/.test(texto)
-}

@@ -21,16 +21,7 @@ export default defineConfig({
 		react(),
 		VitePWA({
 			registerType: 'autoUpdate',
-			includeAssets: [
-				'fonts/InstrumentSerif-Regular.ttf',
-				'fonts/OFL.txt',
-				'icons/*.png',
-				// Assets do tldraw servidos localmente: sem eles o quadro abre na
-				// primeira vez offline sem fonte e sem ícones.
-				'tldraw-fonts/*.woff2',
-				'tldraw-assets/icons/*.svg',
-				'tldraw-assets/translations/*.json',
-			],
+			includeAssets: ['fonts/InstrumentSerif-Regular.ttf', 'fonts/OFL.txt', 'icons/*.png'],
 			manifest: {
 				name: 'Urdume Público',
 				short_name: 'Urdume Público',
@@ -50,8 +41,8 @@ export default defineConfig({
 			},
 			workbox: {
 				globPatterns: ['**/*.{js,css,html,svg,png,ttf,woff2,json}'],
-				// O chunk do tldraw passa de 2 MiB; o precache precisa aceitá-lo para o
-				// quadro abrir offline (requisito de uso offline real).
+				// O bundle tem um chunk grande; o precache precisa aceitá-lo para o
+				// app abrir offline na primeira vez depois da instalação.
 				maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
 				navigateFallback: '/index.html',
 			},

@@ -1,38 +1,45 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from '@/app/router'
-import {
-	createProject,
-	createReminder,
-	createTask,
-	useProjects,
-} from '@/db/repo'
+import { createReminder, createTask, useProjects } from '@/db/repo'
 import { criarEvento } from '@/db/eventos'
 import { criarHabito } from '@/db/habitos'
-import { PALETA, corDoIndice } from '@/ui/paleta'
+import type { TipoTarefa } from '@/db/db'
+import { ROTULO_DO_TIPO, TIPOS_DE_TAREFA } from '@/lib/tarefas'
+import { corDoIndice } from '@/ui/paleta'
+import { EscolherCor } from '@/ui/EscolherCor'
 import { pedirPermissaoDeAviso, agendarLembrete } from '@/lib/avisos'
 import { chaveDoDia, diaDaChave, diaDeHoje, formatarDiaCurto } from '@/lib/date'
 import { interpretar } from '@/lib/interpretar'
 import { Folha } from '@/ui/Folha'
+import { IconeCalendario } from '@/ui/icones'
 import {
-	IconeAdicionar,
-	IconeCalendario,
-	IconeEvento,
-	IconeFogo,
-	IconeHorario,
-	IconePasta,
-} from '@/ui/icones'
+	CHAVE_DA_ORDEM_DE_CRIACAO,
+	ORDEM_PADRAO,
+	moverOpcao,
+	ordenarOpcoes,
+} from '@/app/criacao'
+import { setSetting, useSetting } from '@/db/repo'
+import { IconeDescer, IconeSubir } from '@/ui/icones'
 
 export type TipoCriacao = 'tarefa' | 'projeto' | 'lembrete' | 'evento' | 'habito'
 
 type Etapa = 'escolha' | TipoCriacao
 
-export interface CriarFolhaProps {
+interface CriarFolhaProps {
 	aberta: boolean
 	onFechar: () => void
 	/** Tipo pré-escolhido pelo botão que abriu a folha. */
 	tipo?: TipoCriacao
 	/** Dia pré-selecionado (calendário / tiras do Início). */
 	dia?: string
+	/**
+	 * Pede a criação de projeto à tela que hospeda a folha.
+	 *
+	 * Projeto é o único tipo com formulário próprio (`CriarProjeto`), porque
+	 * precisa dos mesmos campos da central. Repassar em vez de criar aqui evita
+	 * a folha nova nascer e morrer junto com esta.
+	 */
+	onCriarProjeto?: () => void
 }
 
 /**
@@ -43,9 +50,20 @@ export interface CriarFolhaProps {
  * ignorado com um toque. Nada além do título é obrigatório. O dia vem da tela
  * que abriu a folha, então criar a partir do calendário já nasce na data certa.
  */
-export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
+export function CriarFolha({ aberta, onFechar, tipo, dia, onCriarProjeto }: CriarFolhaProps) {
 	const { navigate } = useRouter()
 	const [etapa, setEtapa] = useState<Etapa>(tipo ?? 'escolha')
+	/**
+	 * A ordem do menu de criação é do usuário.
+	 *
+	 * Fica em `settings` (`criacao.ordem`) e é lida com `ordenarOpcoes`, que
+	 * descarta chave desconhecida e repõe o que faltar — a folha nunca abre
+	 * vazia por causa de uma escolha antiga.
+	 */
+	const ordemSalva = useSetting<string[]>(CHAVE_DA_ORDEM_DE_CRIACAO, ORDEM_PADRAO)
+	const opcoes = useMemo(() => ordenarOpcoes(ordemSalva), [ordemSalva])
+	/** Modo "ordenar": a mesma lista, com setas em vez de abrir o formulário. */
+	const [ordenando, setOrdenando] = useState(false)
 	const [titulo, setTitulo] = useState('')
 	const [projetoVinculo, setProjetoVinculo] = useState('')
 	const [quandoLembrete, setQuandoLembrete] = useState('')
@@ -59,9 +77,11 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 	const [recEvento, setRecEvento] = useState<'diaria' | 'semanal' | 'mensal'>('semanal')
 	const [metaHabito, setMetaHabito] = useState('')
 	const [unidadeHabito, setUnidadeHabito] = useState('')
-	const [corEscolhida, setCorEscolhida] = useState(0)
+	// Índice da paleta OU hex livre — os dois formulários (evento e hábito) usam.
+	const [corEscolhida, setCorEscolhida] = useState<number | string>(0)
 	const [prioridade, setPrioridade] = useState(0)
 	const [diaTarefa, setDiaTarefa] = useState('')
+	const [tipoTarefa, setTipoTarefa] = useState<TipoTarefa>('tarefa')
 	const [erro, setErro] = useState<string | null>(null)
 	const [salvando, setSalvando] = useState(false)
 
@@ -69,6 +89,7 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 
 	useEffect(() => {
 		setEtapa(tipo ?? 'escolha')
+		setOrdenando(false)
 		if (!aberta) {
 			setTitulo('')
 			setProjetoVinculo('')
@@ -86,6 +107,7 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 			setCorEscolhida(0)
 			setPrioridade(0)
 			setDiaTarefa('')
+			setTipoTarefa('tarefa')
 			setErro(null)
 			setSalvando(false)
 		} else {
@@ -93,6 +115,11 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 			if (dia) {
 				setDiaEvento(dia)
 				setDiaTarefa(dia)
+			} else if ((tipo ?? 'tarefa') === 'tarefa') {
+				// Tarefa comum nasce com o dia VISÍVEL no campo. O padrão antigo
+				// era aplicar hoje por baixo do formulário; o campo ficava vazio
+				// e a tarefa vencia no dia seguinte sem o usuário ter marcado.
+				setDiaTarefa(chaveDoDia(diaDeHoje()))
 			}
 		}
 	}, [aberta, tipo, dia])
@@ -103,6 +130,12 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 		const resultado = interpretar(titulo)
 		return resultado.entendido.length ? resultado : null
 	}, [titulo, ignorarAuto, etapa])
+
+	/** Move uma opção e grava imediatamente: não há botão "salvar ordem". */
+	async function mover(id: Parameters<typeof moverOpcao>[1], direcao: -1 | 1): Promise<void> {
+		const nova = moverOpcao(opcoes.map((opcao) => opcao.id), id, direcao)
+		await setSetting(CHAVE_DA_ORDEM_DE_CRIACAO, nova)
+	}
 
 	const fechar = (): void => {
 		if (salvando) return
@@ -130,13 +163,29 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 						Boolean,
 					) as string[]
 
+					/**
+					 * O dia é de quem cria, não do formulário.
+					 *
+					 * Antes, sem dia escolhido, a tarefa nascia com `dueDate` de
+					 * hoje — e no dia seguinte virava "atrasada" sem o usuário ter
+					 * marcado nada. Agora:
+					 * - lembrete e ideia NÃO recebem dia por omissão (só se o
+					 *   usuário escolher ou escrever "amanhã");
+					 * - tarefa continua nascendo hoje, porque "criar tarefa" na tela
+					 *   de hoje sempre significou "fazer hoje" — mas com o dia
+					 *   explícito, e a leitura usa isso para não cobrar duas vezes.
+					 */
+					const diaEscolhido = lido.dia || diaTarefa || dia || null
+
 					await createTask({
 						title: lido.titulo || bruto,
-						// `||` e não `??`: os três valores são strings e o vazio é
-						// frequente (tela sem dia escolhido). Com `??`, string vazia
-						// "passa" e a tarefa nasce com `dueDate: ''` — sem dia, fora
-						// de Hoje e invisível para a agenda de avisos.
-						dueDate: lido.dia || diaTarefa || dia || chaveDoDia(diaDeHoje()),
+						tipo: tipoTarefa,
+						// Sem dia = sem cobrança. O campo "Dia" já vem preenchido
+						// com hoje (abaixo), então o comportamento antigo continua
+						// para quem cria uma tarefa comum — mas agora é VISÍVEL e
+						// pode ser limpo. Antes o app aplicava hoje por baixo, sem
+						// mostrar, e a tarefa virava "atrasada" no dia seguinte.
+						dueDate: diaEscolhido,
 						projectId: projetoVinculo || porNome?.id || null,
 						startMin: horaManual
 							? Number(horaManual.split(':')[0]) * 60 + Number(horaManual.split(':')[1])
@@ -144,9 +193,11 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 						durationMin: duracaoManual ? Number(duracaoManual) : (lido.duracao ?? null),
 						priority: (prioridade || lido.prioridade || 0) as 0 | 1 | 2 | 3,
 						tags: etiquetas,
-						recurrence: lido.recorrencia
-							? { tipo: lido.recorrencia.tipo, intervalo: lido.recorrencia.intervalo }
-							: null,
+						someday: tipoTarefa === 'ideia',
+						recurrence:
+							tipoTarefa === 'ideia' || !lido.recorrencia
+								? null
+								: { tipo: lido.recorrencia.tipo, intervalo: lido.recorrencia.intervalo },
 					})
 					break
 				}
@@ -177,8 +228,9 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 					navigate({ name: 'habitos' })
 					return
 				case 'projeto':
-					await createProject({ name: bruto })
-					break
+					// O formulário completo é outra folha (`CriarProjeto`); este
+					// caminho não deve ser alcançado.
+					return
 				case 'lembrete': {
 					const lembrete = await createReminder({
 						text: bruto,
@@ -208,7 +260,7 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 		escolha: 'Criar',
 		tarefa: 'Nova tarefa',
 		evento: 'Novo evento',
-		projeto: 'Nova lista',
+		projeto: 'Novo projeto',
 		lembrete: 'Novo lembrete',
 		habito: 'Novo hábito',
 	}
@@ -245,69 +297,102 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 			passo={etapa}
 			sobre={
 				etapa === 'tarefa' || etapa === 'evento'
-					? `Para ${formatarDiaCurto(diaDaChave(diaDeReferencia))}`
+					? etapa === 'tarefa' && tipoTarefa !== 'tarefa'
+						? tipoTarefa === 'lembrete'
+							? 'Um lembrete, sem prazo'
+							: 'Uma ideia, sem data'
+						: `Para ${formatarDiaCurto(diaDaChave(diaDeReferencia))}`
 					: undefined
 			}
 		>
 			{etapa === 'escolha' ? (
 				<div className="opcoes-criacao">
-					<button
-						type="button"
-						className="opcao-criacao"
-						data-foco-inicial
-						onClick={() => setEtapa('tarefa')}
-					>
-						<span className="opcao-criacao__icone" aria-hidden="true">
-							<IconeAdicionar size={22} />
-						</span>
-						<span className="opcao-criacao__texto">
-							<span className="opcao-criacao__titulo">Tarefa</span>
-							<span className="opcao-criacao__descricao">
-								Para {formatarDiaCurto(diaDaChave(dia ?? chaveDoDia(diaDeHoje())))}
-							</span>
-						</span>
-					</button>
+					<div className="opcoes-criacao__topo">
+						<p className="nota">
+							{ordenando
+								? 'Use as setas para mudar a ordem. Ela fica salva.'
+								: 'O que você quer criar?'}
+						</p>
+						<button
+							type="button"
+							className="botao botao--texto"
+							onClick={() => setOrdenando((atual) => !atual)}
+						>
+							{ordenando ? 'Pronto' : 'Ordenar'}
+						</button>
+					</div>
+					<div className="opcoes-criacao__lista">
+					{opcoes.map((opcao, indice) => {
+						const Icone = opcao.icone
+						if (ordenando) {
+							return (
+								<div key={opcao.id} className="opcao-criacao opcao-criacao--ordenando">
+									<span className="opcao-criacao__icone" aria-hidden="true">
+										<Icone size={22} />
+									</span>
+									<span className="opcao-criacao__texto">
+										<span className="opcao-criacao__titulo">{opcao.titulo}</span>
+									</span>
+									<span className="opcao-criacao__setas">
+										<button
+											type="button"
+											className="botao-icone botao-icone--pequeno"
+											aria-label={`Mover ${opcao.titulo} para cima`}
+											disabled={indice === 0}
+											onClick={() => void mover(opcao.id, -1)}
+										>
+											<IconeSubir size={18} />
+										</button>
+										<button
+											type="button"
+											className="botao-icone botao-icone--pequeno"
+											aria-label={`Mover ${opcao.titulo} para baixo`}
+											disabled={indice === opcoes.length - 1}
+											onClick={() => void mover(opcao.id, 1)}
+										>
+											<IconeDescer size={18} />
+										</button>
+									</span>
+								</div>
+							)
+						}
 
-					<button type="button" className="opcao-criacao" onClick={() => setEtapa('evento')}>
-						<span className="opcao-criacao__icone" aria-hidden="true">
-							<IconeEvento size={22} />
-						</span>
-						<span className="opcao-criacao__texto">
-							<span className="opcao-criacao__titulo">Evento</span>
-							<span className="opcao-criacao__descricao">Compromisso com hora e duração</span>
-						</span>
-					</button>
-
-					<button type="button" className="opcao-criacao" onClick={() => setEtapa('habito')}>
-						<span className="opcao-criacao__icone" aria-hidden="true">
-							<IconeFogo size={22} />
-						</span>
-						<span className="opcao-criacao__texto">
-							<span className="opcao-criacao__titulo">Hábito</span>
-							<span className="opcao-criacao__descricao">Algo que se repete e tem sequência</span>
-						</span>
-					</button>
-
-					<button type="button" className="opcao-criacao" onClick={() => setEtapa('lembrete')}>
-						<span className="opcao-criacao__icone" aria-hidden="true">
-							<IconeHorario size={22} />
-						</span>
-						<span className="opcao-criacao__texto">
-							<span className="opcao-criacao__titulo">Lembrete</span>
-							<span className="opcao-criacao__descricao">Um aviso curto, com ou sem hora</span>
-						</span>
-					</button>
-
-					<button type="button" className="opcao-criacao" onClick={() => setEtapa('projeto')}>
-						<span className="opcao-criacao__icone" aria-hidden="true">
-							<IconePasta size={22} />
-						</span>
-						<span className="opcao-criacao__texto">
-							<span className="opcao-criacao__titulo">Lista</span>
-							<span className="opcao-criacao__descricao">Agrupa tarefas com uma cor</span>
-						</span>
-					</button>
-
+						return (
+							<button
+								key={opcao.id}
+								type="button"
+								className="opcao-criacao"
+								data-foco-inicial={indice === 0 ? true : undefined}
+								onClick={() => {
+									// "Lista" na verdade cria um projeto; tem formulário
+									// próprio e a folha repassa em vez de abrir o genérico.
+									if (opcao.id === 'lista') {
+										if (onCriarProjeto) {
+											onFechar()
+											onCriarProjeto()
+											return
+										}
+										setEtapa('projeto')
+										return
+									}
+									setEtapa(opcao.id)
+								}}
+							>
+								<span className="opcao-criacao__icone" aria-hidden="true">
+									<Icone size={22} />
+								</span>
+								<span className="opcao-criacao__texto">
+									<span className="opcao-criacao__titulo">{opcao.titulo}</span>
+									<span className="opcao-criacao__descricao">
+										{opcao.id === 'tarefa'
+											? `Para ${formatarDiaCurto(diaDaChave(dia ?? chaveDoDia(diaDeHoje())))}`
+											: opcao.descricao}
+									</span>
+								</span>
+							</button>
+						)
+					})}
+					</div>
 				</div>
 			) : (
 				<form
@@ -317,9 +402,31 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 						void salvar()
 					}}
 				>
+					{etapa === 'tarefa' ? (
+						<div>
+							<span className="campo-rotulo">Tipo</span>
+							<div className="segmentado" role="group" aria-label="Tipo">
+								{TIPOS_DE_TAREFA.map((tipo) => (
+									<button
+										key={tipo}
+										type="button"
+										className="segmentado__item"
+										aria-pressed={tipoTarefa === tipo}
+										onClick={() => setTipoTarefa(tipo)}
+									>
+										{ROTULO_DO_TIPO[tipo].nome}
+									</button>
+								))}
+							</div>
+							<p className="nota" style={{ marginTop: 6 }}>
+								{ROTULO_DO_TIPO[tipoTarefa].descricao}
+							</p>
+						</div>
+					) : null}
+
 					<div>
 						<label className="campo-rotulo" htmlFor="criar-titulo">
-							{etapa === 'lembrete' ? 'Lembrete' : etapa === 'projeto' ? 'Nome da lista' : 'Título'}
+							{etapa === 'lembrete' ? 'Lembrete' : etapa === 'projeto' ? 'Nome do projeto' : 'Título'}
 						</label>
 						<input
 							id="criar-titulo"
@@ -366,18 +473,31 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 
 					{etapa === 'tarefa' ? (
 						<>
-							<div>
-								<label className="campo-rotulo" htmlFor="criar-dia">
-									Dia
-								</label>
-								<input
-									id="criar-dia"
-									className="campo campo--compacto"
-									type="date"
-									value={diaTarefa}
-									onChange={(evento) => setDiaTarefa(evento.target.value)}
-								/>
-							</div>
+							{tipoTarefa === 'tarefa' ? (
+								<div>
+									<label className="campo-rotulo" htmlFor="criar-dia">
+										Dia
+									</label>
+									<input
+										id="criar-dia"
+										className="campo campo--compacto"
+										type="date"
+										value={diaTarefa}
+										onChange={(evento) => setDiaTarefa(evento.target.value)}
+									/>
+									<p className="nota" style={{ marginTop: 6 }}>
+										{diaTarefa
+											? 'Apague para uma tarefa sem dia: ela não vence.'
+											: 'Sem dia, a tarefa não vence — fica só na lista.'}
+									</p>
+								</div>
+							) : (
+								<p className="nota">
+									{tipoTarefa === 'lembrete'
+										? 'Sem dia, ele não vence. A hora abaixo só agenda um aviso, se você quiser.'
+										: 'Ideia fica guardada em "Algum dia", sem prazo.'}
+								</p>
+							)}
 
 							<div className="campo-duplo">
 								<div>
@@ -433,7 +553,7 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 
 							<div>
 								<label className="campo-rotulo" htmlFor="criar-projeto">
-									Lista (opcional)
+									Projeto (opcional)
 								</label>
 								<select
 									id="criar-projeto"
@@ -441,7 +561,7 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 									value={projetoVinculo}
 									onChange={(evento) => setProjetoVinculo(evento.target.value)}
 								>
-									<option value="">Sem lista</option>
+									<option value="">Sem projeto</option>
 									{(projetos ?? []).map((projeto) => (
 										<option key={projeto.id} value={projeto.id}>
 											{projeto.name}
@@ -496,19 +616,7 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 
 							<div>
 								<span className="campo-rotulo">Cor</span>
-								<div className="amostra-cores" style={{ padding: '4px 0 0' }} role="group" aria-label="Cor do evento">
-									{PALETA.map((item) => (
-										<button
-											key={item.indice}
-											type="button"
-											className="amostra-cor"
-											style={{ background: item.hex }}
-											aria-label={item.rotulo}
-											aria-pressed={corEscolhida === item.indice}
-											onClick={() => setCorEscolhida(item.indice)}
-										/>
-									))}
-								</div>
+								<EscolherCor valor={corEscolhida} onMudar={setCorEscolhida} rotulo="Cor do evento" />
 							</div>
 
 							<div className="linha-ajuste" style={{ padding: 0 }}>
@@ -597,19 +705,7 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 
 							<div>
 								<span className="campo-rotulo">Cor</span>
-								<div className="amostra-cores" style={{ padding: '4px 0 0' }} role="group" aria-label="Cor do hábito">
-									{PALETA.map((item) => (
-										<button
-											key={item.indice}
-											type="button"
-											className="amostra-cor"
-											style={{ background: item.hex }}
-											aria-label={item.rotulo}
-											aria-pressed={corEscolhida === item.indice}
-											onClick={() => setCorEscolhida(item.indice)}
-										/>
-									))}
-								</div>
+								<EscolherCor valor={corEscolhida} onMudar={setCorEscolhida} rotulo="Cor do hábito" />
 							</div>
 
 							<p className="nota">
@@ -655,21 +751,6 @@ export function CriarFolha({ aberta, onFechar, tipo, dia }: CriarFolhaProps) {
 				</form>
 			)}
 		</Folha>
-	)
-}
-
-export function ProjetoSelect({ value, onChange }: { value: string; onChange: (valor: string) => void }) {
-	const projetos = useProjects()
-
-	return (
-		<select id="criar-projeto" className="campo" value={value} onChange={(evento) => onChange(evento.target.value)}>
-			<option value="">Sem lista</option>
-			{(projetos ?? []).map((projeto) => (
-				<option key={projeto.id} value={projeto.id}>
-					{projeto.name}
-				</option>
-			))}
-		</select>
 	)
 }
 

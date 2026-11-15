@@ -61,6 +61,35 @@ export interface Project extends Timestamped, SoftDeletable {
 	priority?: Priority
 	/** Marcos do projeto: as entregas que dividem o caminho. */
 	marcos?: Marco[]
+	/**
+	 * Blocos internos: ordem e quais estão ocultos.
+	 *
+	 * Cada projeto é uma tela com várias seções (painel, marcos, tarefas,
+	 * anotações, resumo, texto). Antes a ordem era fixa no código e todas
+	 * apareciam sempre. Aqui fica só a CONFIGURAÇÃO; o conteúdo continua nas
+	 * tabelas próprias.
+	 *
+	 * Ausente = padrão (`BLOCOS_DO_PROJETO_PADRAO`), então nenhum projeto
+	 * existente muda de aparência ao atualizar.
+	 */
+	blocos?: BlocoDoProjeto[]
+}
+
+/**
+ * Configuração de um bloco dentro da tela do projeto.
+ *
+ * `id` é estável (não muda ao reordenar) e `tipo` diz o que desenhar. O tipo
+ * `texto` é o recado livre, como no Início.
+ */
+export interface BlocoDoProjeto {
+	id: string
+	tipo: 'painel' | 'marcos' | 'tarefas' | 'anotacoes' | 'resumo' | 'texto'
+	/** Oculto sem perder conteúdo: dá para reativar depois. */
+	oculto?: boolean
+	/** Título próprio; vazio usa o padrão do tipo. */
+	titulo?: string
+	/** Texto livre (tipo `texto`). */
+	texto?: string
 }
 
 /**
@@ -124,6 +153,9 @@ export interface Subtask {
 	startMin?: number | null
 }
 
+/** O que o item é: tarefa com prazo, lembrete sem prazo, ou ideia. */
+export type TipoTarefa = 'tarefa' | 'lembrete' | 'ideia'
+
 export interface Task extends Timestamped, SoftDeletable {
 	id: string
 	projectId?: string | null
@@ -143,6 +175,14 @@ export interface Task extends Timestamped, SoftDeletable {
 	startMin?: number | null
 	/** Duração em minutos (bloco de tempo). */
 	durationMin?: number | null
+	/**
+	 * Natureza do item.
+	 *
+	 * `lembrete` não cobra prazo (não vira atrasado) e `ideia` é "algum dia".
+	 * Ausente nos registros antigos equivale a `tarefa` — a leitura nunca
+	 * confia no campo (ver `tipoDaTarefa` em `lib/tarefas.ts`).
+	 */
+	tipo?: TipoTarefa
 	/** Algum dia: existe, não cobra, não aparece em Hoje. */
 	someday?: boolean
 	/** Etiquetas livres (texto curto). */
@@ -170,8 +210,14 @@ export interface Habit extends Timestamped, SoftDeletable {
 	description?: string | null
 	/** Ícone Material Symbols (nome do arquivo, ex. "menu_book"). */
 	icone?: string | null
-	/** Cor da paleta Material (0..11). */
-	cor?: number | null
+	/**
+	 * Cor: índice da paleta (0..11) OU hex livre (`#rrggbb`).
+	 *
+	 * Duas formas porque a paleta de doze acaba: com mais de doze itens, dois
+	 * ficam iguais e a cor deixa de identificar. Índice continua válido — todos
+	 * os registros antigos são assim — e quem lê usa `corDe`, que aceita as duas.
+	 */
+	cor?: number | string | null
 	/** Minutos desde 00:00 do horário habitual. */
 	startMin?: number | null
 	/** Dias da semana em que vale: 0=domingo … 6=sábado. Vazio = todos. */
@@ -208,8 +254,8 @@ export interface Evento extends Timestamped, SoftDeletable {
 	endAt: number
 	/** Ocupa o dia inteiro (ignora horas). */
 	diaInteiro: boolean
-	/** Índice da paleta de categorias (0..6). */
-	cor: number
+	/** Índice da paleta (0..11) ou hex livre. Ver `Habit.cor`. */
+	cor: number | string
 	notes?: string | null
 	local?: string | null
 	recurrence?: Recorrencia | null
@@ -225,17 +271,6 @@ export interface Reminder extends Timestamped, SoftDeletable {
 	order: number
 	/** Quando o aviso local já foi mostrado (evita repetir ao reabrir). */
 	notificadoEm?: number | null
-}
-
-export interface Page extends Timestamped, SoftDeletable {
-	id: string
-	projectId?: string | null
-	title: string
-	/** Snapshot do documento tldraw, serializado em JSON. */
-	snapshot?: string | null
-	/** SVG reduzido do conteúdo, usado como miniatura na lista (RF-22). */
-	thumbnail?: string | null
-	order: number
 }
 
 export interface Setting {
@@ -339,6 +374,12 @@ export interface AiChatMessage {
 	papel: 'usuario' | 'jarvis'
 	texto: string
 	meta?: unknown
+	/**
+	 * Conversa a que a mensagem pertence (v6).
+	 *
+	 * Ausente nas mensagens antigas: elas pertencem à conversa `principal`.
+	 */
+	sessao?: string
 }
 
 /**
@@ -355,7 +396,6 @@ export class NexoDatabase extends Dexie {
 	projects!: Table<Project, string>
 	tasks!: Table<Task, string>
 	reminders!: Table<Reminder, string>
-	pages!: Table<Page, string>
 	events!: Table<Evento, string>
 	habits!: Table<Habit, string>
 	habitLogs!: Table<HabitLog, string>
@@ -380,7 +420,6 @@ export class NexoDatabase extends Dexie {
 			projects: 'id, name, archived, order, updatedAt, deletedAt',
 			tasks: 'id, projectId, dueDate, done, priority, order, createdAt, updatedAt, deletedAt',
 			reminders: 'id, dueAt, done, order, updatedAt, deletedAt',
-			pages: 'id, projectId, title, updatedAt, deletedAt',
 			settings: 'key',
 		})
 
@@ -397,7 +436,6 @@ export class NexoDatabase extends Dexie {
 				tasks:
 					'id, projectId, dueDate, startMin, done, someday, priority, order, createdAt, updatedAt, deletedAt, *tags',
 				reminders: 'id, dueAt, done, order, updatedAt, deletedAt',
-				pages: 'id, projectId, title, updatedAt, deletedAt',
 				events: 'id, projectId, startAt, diaInteiro, updatedAt, deletedAt',
 				settings: 'key',
 			})
@@ -426,7 +464,6 @@ export class NexoDatabase extends Dexie {
 				tasks:
 					'id, projectId, dueDate, deadline, startMin, done, someday, priority, order, createdAt, updatedAt, deletedAt, *tags',
 				reminders: 'id, dueAt, done, order, updatedAt, deletedAt',
-				pages: 'id, projectId, title, updatedAt, deletedAt',
 				events: 'id, projectId, startAt, diaInteiro, updatedAt, deletedAt',
 				habits: 'id, title, order, projectId, updatedAt, deletedAt',
 				habitLogs: 'id, habitId, day, updatedAt, deletedAt, [habitId+day]',
@@ -456,7 +493,6 @@ export class NexoDatabase extends Dexie {
 			tasks:
 				'id, projectId, dueDate, deadline, startMin, done, someday, priority, order, createdAt, updatedAt, deletedAt, *tags',
 			reminders: 'id, dueAt, done, order, updatedAt, deletedAt',
-			pages: 'id, projectId, title, updatedAt, deletedAt',
 			events: 'id, projectId, startAt, diaInteiro, updatedAt, deletedAt',
 			habits: 'id, title, order, projectId, updatedAt, deletedAt',
 			habitLogs: 'id, habitId, day, updatedAt, deletedAt, [habitId+day]',
@@ -492,7 +528,6 @@ export class NexoDatabase extends Dexie {
 			tasks:
 				'id, projectId, dueDate, deadline, startMin, done, someday, priority, order, createdAt, updatedAt, deletedAt, *tags',
 			reminders: 'id, dueAt, done, order, updatedAt, deletedAt',
-			pages: 'id, projectId, title, updatedAt, deletedAt',
 			events: 'id, projectId, startAt, diaInteiro, updatedAt, deletedAt',
 			habits: 'id, title, order, projectId, updatedAt, deletedAt',
 			habitLogs: 'id, habitId, day, updatedAt, deletedAt, [habitId+day]',
@@ -503,6 +538,35 @@ export class NexoDatabase extends Dexie {
 			aiRuns: 'id, em, dia',
 			aiActions: 'id, em, desfazerAte',
 			aiChat: 'id, em',
+			aiSecrets: 'chave',
+			projectNotes: 'id, projectId, em, updatedAt, deletedAt',
+		})
+
+		/*
+		 * v6 — conversa por sessão.
+		 *
+		 * A conversa era um fio único; passou a ter até três sessões, e a tela
+		 * precisa listar a aberta. O índice `sessao` é o que evita varrer todas
+		 * as mensagens para desenhar uma conversa.
+		 *
+		 * Mensagem antiga (de antes desta versão) não tem `sessao` e pertence à
+		 * conversa `principal` — a leitura trata esse caso, nada é migrado.
+		 */
+		this.version(6).stores({
+			projects: 'id, name, archived, order, priority, categoria, status, updatedAt, deletedAt',
+			tasks:
+				'id, projectId, dueDate, deadline, startMin, done, someday, priority, order, createdAt, updatedAt, deletedAt, *tags',
+			reminders: 'id, dueAt, done, order, updatedAt, deletedAt',
+			events: 'id, projectId, startAt, diaInteiro, updatedAt, deletedAt',
+			habits: 'id, title, order, projectId, updatedAt, deletedAt',
+			habitLogs: 'id, habitId, day, updatedAt, deletedAt, [habitId+day]',
+			settings: 'key',
+			aiJournal: '++seq, id, em, dia, tipo, entidade, fingerprint',
+			aiMemory: 'id, chave, atualizadoEm',
+			aiJobs: 'id, quando, estado, tipo',
+			aiRuns: 'id, em, dia',
+			aiActions: 'id, em, desfazerAte',
+			aiChat: 'id, em, sessao',
 			aiSecrets: 'chave',
 			projectNotes: 'id, projectId, em, updatedAt, deletedAt',
 		})

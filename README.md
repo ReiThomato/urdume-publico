@@ -11,9 +11,13 @@ IA que roda **na sua chave**. Sem conta, sem servidor do autor, sem telemetria.
 | --- | --- | --- |
 | ![Agenda](docs/img/04-agenda.png) | ![Hábitos](docs/img/05-habitos.png) | ![Jarvis](docs/img/06-jarvis.png) |
 
+| Projeto | Ajustes | Inteligência |
+| --- | --- | --- |
+| ![Projeto](docs/img/08-projeto.png) | ![Ajustes](docs/img/07-ajustes.png) | ![Inteligência](docs/img/09-ia.png) |
+
 > ## ⚠️ Beta
 >
-> Este app está em **beta**. Funciona, tem 295 testes automatizados, mas não
+> Este app está em **beta**. Funciona, tem **569 testes automatizados**, mas não
 > passou por uso prolongado em muitos aparelhos. Espere encontrar defeitos.
 > Leia [Limites e falhas conhecidas](docs/LIMITES.md) antes de confiar seus dados
 > a ele — e exporte um backup de vez em quando.
@@ -24,22 +28,33 @@ IA que roda **na sua chave**. Sem conta, sem servidor do autor, sem telemetria.
 
 **Tarefas** com dia marcado, prazo separado, hora, duração, prioridade,
 etiquetas e subtarefas. A distinção entre "vou fazer quinta" e "tenho que
-entregar sexta" é do modelo, não um campo de texto.
+entregar sexta" é do modelo, não um campo de texto. Cada item é tarefa,
+lembrete (não cobra prazo) ou ideia (algum dia).
 
 **Projetos** com categoria livre, prioridade própria (separada da ordem
-manual), prazo, marcos e anotações datadas. Cinco critérios de ordenação.
+manual), prazo, marcos, anotações datadas e blocos configuráveis — dá para
+esconder o que não usa sem apagar nada. Cinco critérios de ordenação.
 
-**Hábitos** com dias da semana, meta, sequência e mapa de calor.
+**Hábitos** com dias da semana, meta numérica, sequência, mapa de calor e
+consistência dos últimos 30 dias.
 
-**Agenda** com mês, dia selecionável e eventos com duração.
+**Agenda** com mês, dia selecionável e eventos com duração e repetição.
 
 **Lembretes** que disparam notificação no horário, mesmo com o app fechado.
 
+**Busca** em tarefas, subtarefas, projetos, eventos e lembretes, ignorando
+acentos e maiúsculas.
+
+**Lixeira** com tudo que foi excluído: restaurar ou apagar de vez, com
+confirmação. A exclusão normal é suave e reversível.
+
 **Jarvis** — o assistente. Ele lê o seu dia, aponta o que está travando e
 **propõe** ações (criar tarefa, marcar hábito, anotar num projeto). Nada é
-executado sem a sua confirmação, e cada ação pode ser desfeita.
+executado sem a sua confirmação, e cada ação pode ser desfeita. A presença dele
+na tela é uma ilha flutuante no topo, que só aparece quando há algo a dizer.
 
-![Projeto](docs/img/08-projeto.png)
+**Backup** em JSON, exportado para a pasta Documentos do aparelho no APK (com
+compartilhamento) e por download no navegador.
 
 ---
 
@@ -48,6 +63,7 @@ executado sem a sua confirmação, e cada ação pode ser desfeita.
 ### 1. Rodar no navegador (o mais rápido)
 
 ```bash
+cd app
 npm install
 npm run dev
 ```
@@ -63,19 +79,20 @@ a IA funcionar de verdade, use o APK.
 Pré-requisitos: Node 20+, JDK 17 e Android SDK.
 
 ```bash
+cd app
 npm install
 npm run build
 npx cap sync android
 cd android && ./gradlew assembleDebug
 ```
 
-O APK sai em `android/app/build/outputs/apk/debug/app-debug.apk`.
+O APK sai em `app/android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ### 3. Ligar a IA
 
 Precisa de uma chave de um provedor. O app **não** traz chave embutida.
 
-1. **Ajustes → Jarvis**
+1. **Ajustes → Jarvis e IA**
 2. Escolha o provedor (OpenAI, Gemini, Claude, DeepSeek ou OpenRouter)
 3. Toque em **Adicionar** e cole a chave
 4. Volte ao Jarvis
@@ -95,7 +112,7 @@ tiver o celular desbloqueado consegue lê-la; por isso o bloqueio de tela import
 
 ## Como a IA é chamada
 
-Um único módulo (`src/lib/jarvis/provedores.ts`) concentra os três dialetos.
+Um único módulo (`src/lib/jarvis/provedores.ts`) concentra os dialetos.
 Eles **não** são compatíveis entre si, e essa é a parte que costuma quebrar:
 
 | | OpenAI e compatíveis | Gemini | Anthropic |
@@ -104,10 +121,11 @@ Eles **não** são compatíveis entre si, e essa é a parte que costuma quebrar:
 | Autenticação | `Authorization: Bearer` | `x-goog-api-key` | `x-api-key` + versão |
 | Instrução de sistema | `messages[0]` | `systemInstruction` | `system` |
 | Resposta | `choices[0].message.content` | `candidates[0].content.parts[]` | `content[]` |
+| JSON forçado | `response_format` | `responseMimeType` | só via prompt |
 
 **Adicionar um provedor** que fale o formato da OpenAI é uma entrada em
 `PROVEDORES`, com `dialeto: 'openai'`. O teste `provedores.test.ts` confere que
-todo provedor declarado sabe montar corpo e ler resposta.
+todo provedor declarado sabe montar corpo, montar cabeçalho e ler resposta.
 
 Não há proxy, gateway nem endereço do autor no caminho: a requisição sai do seu
 aparelho direto para o provedor, com a sua chave.
@@ -116,10 +134,13 @@ aparelho direto para o provedor, com a sua chave.
 
 ## O que a IA pode e não pode
 
-**Pode propor:** criar tarefa, projeto, marco, evento, lembrete, hábito; marcar
-hábito; anotar em projeto; organizar projeto (categoria e prioridade); avisar.
+**Pode propor:** criar e editar tarefa, projeto, marco, evento, lembrete e
+hábito; concluir tarefa, marco, evento, subtarefa e lembrete; marcar hábito;
+anotar em projeto; organizar projeto (categoria e prioridade); avisar. Também
+opera **lotes** ("conclua as tarefas atrasadas do projeto X"), sempre mostrando
+quantas serão afetadas antes de aplicar.
 
-**Nunca executa sem confirmação** e nunca apaga, altera backup, muda
+**Nunca executa sem confirmação** e nunca apaga, restaura backup, muda
 configuração ou o nível de autonomia. Existe modo silencioso, manual e pausado.
 
 **Privacidade:** o que vai para o provedor é um resumo do seu dia — títulos de
@@ -131,21 +152,23 @@ anotações livres ficam no aparelho.
 ## Estrutura
 
 ```
-src/
-  app/        roteador, tema, blocos do Início
-  db/         Dexie (IndexedDB): schema, repositório, migrações
-  lib/
-    jarvis/   o assistente: sinais, relevância, executor, autonomia, provedores
-    date.ts   datas locais (o app conta o dia pelo fuso do aparelho)
-  screens/    uma tela por rota
-  ui/         componentes compartilhados
-  styles/     CSS por área, sem framework
-android/      projeto Capacitor
-docs/         documentação além deste README
+app/
+  src/
+    app/        roteador, tema, blocos do Início, menu de criação
+    db/         Dexie (IndexedDB): schema, repositório, migrações
+    lib/
+      jarvis/   o assistente: sinais, relevância, executor, autonomia, provedores
+      date.ts   datas locais (o app conta o dia pelo fuso do aparelho)
+    screens/    uma tela por rota
+    ui/         componentes compartilhados
+    styles/     CSS por área, sem framework
+  android/      projeto Capacitor
+docs/           documentação além deste README
 ```
 
-O banco é local: IndexedDB dentro do WebView. Não há conta, login nem nuvem.
-**Faça backup** em Ajustes → Seus dados → Exportar.
+O banco é local: IndexedDB dentro do WebView, com nome próprio
+(`urdume-publico`). Não há conta, login nem nuvem. **Faça backup** em
+Ajustes → Dados → Exportar.
 
 ---
 
@@ -171,14 +194,16 @@ Se você quer usar comercialmente, é preciso falar com o autor.
 ## De onde isto veio
 
 Este é um derivado de um app pessoal, publicado como variante de código aberto.
-A versão original tinha duas coisas que **não** estão aqui, por decisão de
+A versão original tem três coisas que **não** estão aqui, por decisão de
 licenciamento e de privacidade:
 
 - **o quadro de desenho** (tldraw), que tem licença própria e não pode ser
   redistribuído assim;
 - **a sincronização com um servidor pessoal**, que dependia da infraestrutura do
-  autor.
+  autor;
+- **o motor de inteligência mais recente** (memória em grafo, pensamentos
+  automáticos, perfil e insights), que continua exclusivo da versão principal.
 
-O que ficou é o núcleo: rotina, projetos e o assistente. Ele foi reescrito para
+O que ficou é o núcleo: rotina, projetos e o assistente. Ele foi adaptado para
 receber a chave de qualquer provedor, com identidade própria de aplicativo e de
 banco, para não conflitar com o original no mesmo aparelho.

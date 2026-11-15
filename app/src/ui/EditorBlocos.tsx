@@ -164,7 +164,7 @@ export function EditorBlocos({
 				>
 					<div>
 						<label className="campo-rotulo" htmlFor="texto-bloco">
-							Texto do quadro
+							Texto do bloco
 						</label>
 						<textarea
 							id="texto-bloco"

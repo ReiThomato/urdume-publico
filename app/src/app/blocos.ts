@@ -43,7 +43,7 @@ export interface Bloco {
 	texto?: string
 }
 
-export interface DefinicaoBloco {
+interface DefinicaoBloco {
 	tipo: TipoBloco
 	nome: string
 	descricao: string

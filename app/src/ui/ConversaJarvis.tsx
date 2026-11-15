@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { db } from '@/db/db'
 import { toDayKey } from '@/db/repo'
 import { createId } from '@/db/id'
 import type { AiChatMessage } from '@/db/db'
+import { historicoParaOModelo } from '@/lib/jarvis/memoria-conversa'
 import { Topo } from '@/ui/AppShell'
 import { Folha } from '@/ui/Folha'
 import { useRouter } from '@/app/router'
-import { IconeEnviar, IconeDesfazer, IconeVoltar } from '@/ui/icones'
+import { IconeConversas, IconeEnviar, IconeDesfazer, IconeVoltar } from '@/ui/icones'
 import { lerPainel } from '@/lib/jarvis/motor'
 import { lerPreferencias, dentroDosLimites, registrarExecucao } from '@/lib/jarvis/estado'
 import { lerRetrato } from '@/lib/jarvis/leitura'
@@ -15,12 +16,22 @@ import { consultar } from '@/lib/jarvis/ia'
 import type { RespostaDaIA } from '@/lib/jarvis/ia'
 import { avaliarLote, desfazerLote, executarLote, ultimoLoteDesfazivel } from '@/lib/jarvis/executor'
 import type { AvaliacaoDaAcao } from '@/lib/jarvis/executor'
+import { selecionarTarefas } from '@/lib/jarvis/lotes'
 import { lerProvedor, temChaveApi } from '@/lib/jarvis/segredo'
 import { PROVEDORES } from '@/lib/jarvis/provedores'
 import { estaOnline } from '@/lib/jarvis/rede'
 import { enfileirar, idadeDoContexto, listarFila, removerDaFila } from '@/lib/jarvis/fila'
 import type { PedidoNaFila } from '@/lib/jarvis/fila'
 import { textosDeConhecimento } from '@/lib/jarvis/conhecimento'
+import {
+	apagarSessao,
+	garantirSessao,
+	listarSessoes,
+	mensagensDaSessao,
+	novaSessao,
+	abrirSessao,
+} from '@/lib/jarvis/conversas'
+import type { SessaoDeChat } from '@/lib/jarvis/conversas'
 
 /**
  * Conversa com o Jarvis — a camada consultiva.
@@ -47,15 +58,43 @@ interface Props {
 export function ConversaJarvis({ semente, onVoltar }: Props) {
 	const { navigate } = useRouter()
 	const [mensagens, setMensagens] = useState<AiChatMessage[]>([])
+	/** Conversa aberta e a lista das três mais recentes. */
+	const [sessao, setSessao] = useState<string>('principal')
+	const [sessoes, setSessoes] = useState<SessaoDeChat[]>([])
+	const [menuConversas, setMenuConversas] = useState(false)
 	const [texto, setTexto] = useState('')
 	const [carregando, setCarregando] = useState(false)
 	const [erro, setErro] = useState<string | null>(null)
 	const [pendente, setPendente] = useState<{ avaliacoes: AvaliacaoDaAcao[]; mensagem: string } | null>(null)
+	/**
+	 * Índices das ações NÃO marcadas na prévia.
+	 *
+	 * O padrão é vazio: tudo marcado. O usuário desmarca o que não quer, e é
+	 * isso que evita ter de repetir o pedido inteiro para recusar uma única
+	 * sugestão do lote.
+	 */
+	const [recusadas, setRecusadas] = useState<Set<number>>(() => new Set())
 	const [loteDesfazer, setLoteDesfazer] = useState<string | null>(null)
 	const [temChave, setTemChave] = useState(true)
 	const [fila, setFila] = useState<PedidoNaFila[]>([])
 	const fimRef = useRef<HTMLDivElement>(null)
 	const campoRef = useRef<HTMLTextAreaElement>(null)
+
+	/**
+	 * Quantas ações estão marcadas na prévia.
+	 *
+	 * Fica fora do JSX para o rodapé e o subtítulo usarem o mesmo número — e
+	 * para o botão dizer a verdade quando o usuário desmarca tudo.
+	 */
+	const selecionadas = useMemo(
+		() =>
+			pendente
+				? pendente.avaliacoes.filter(
+						(avaliacao, indice) => avaliacao.risco !== 'proibido' && !recusadas.has(indice),
+					).length
+				: 0,
+		[pendente, recusadas],
+	)
 
 	// O campo cresce com o texto até um teto. `field-sizing: content` faz isso
 	// sozinho, mas só existe em WebView recente; medir o `scrollHeight` vale em
@@ -100,16 +139,25 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 		}
 	}, [])
 
-	useEffect(() => {
-		void (async () => {
-			setTemChave(await temChaveApi(db))
-			const historico = await db.aiChat.orderBy('em').limit(60).toArray()
-			setMensagens(historico)
-			const lote = await ultimoLoteDesfazivel(db)
-			setLoteDesfazer(lote?.id ?? null)
-			setFila(await listarFila(db))
-		})()
+	const carregarConversa = useCallback(async (): Promise<void> => {
+		setTemChave(await temChaveApi(db))
+
+		const aberta = await garantirSessao(db)
+		setSessao(aberta)
+		setSessoes(await listarSessoes(db))
+
+		// As últimas 60, em ordem cronológica. `orderBy('em').limit(60)` puro
+		// devolveria as 60 MAIS ANTIGAS e a tela abriria no começo da conversa.
+		setMensagens(await mensagensDaSessao(aberta, 60, db))
+
+		const lote = await ultimoLoteDesfazivel(db)
+		setLoteDesfazer(lote?.id ?? null)
+		setFila(await listarFila(db))
 	}, [])
+
+	useEffect(() => {
+		void carregarConversa()
+	}, [carregarConversa])
 
 	useEffect(() => {
 		if (semente) setTexto(semente)
@@ -156,8 +204,8 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 			}
 
 			setMensagens((atuais) => [...atuais, minha, dela])
-			await db.aiChat.put(minha)
-			await db.aiChat.put(dela)
+			await db.aiChat.put({ ...minha, sessao })
+			await db.aiChat.put({ ...dela, sessao })
 			setTexto('')
 			return
 		}
@@ -172,7 +220,7 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 			texto: pergunta,
 		}
 		setMensagens((atuais) => [...atuais, minha])
-		await db.aiChat.put(minha)
+		await db.aiChat.put({ ...minha, sessao })
 
 		try {
 			const prefs = await lerPreferencias(db)
@@ -199,8 +247,16 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 			])
 
 			// O provedor ativo decide endpoint, modelo e nome do campo de saída.
-			// Antes era fixo na DeepSeek, e uma chave da Deploy dava 401.
+			// Antes era fixo na DeepSeek, e uma chave da OpenAI dava 401.
 			const provedorAtivo = await lerProvedor(db)
+
+			// Memória de conversa: a janela recente vai como turnos e o que ficou
+			// para trás vira um resumo. Sem isso, cada pergunta era a primeira.
+			const { mensagens: turnos, resumo } = await historicoParaOModelo({
+				ate: agora,
+				database: db,
+				sessao,
+			})
 
 			const resultado = await consultar(
 				{
@@ -210,6 +266,8 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 					nomesDeProjeto,
 					personalidade,
 					conhecimento,
+					historico: turnos,
+					recusas: resumo ? [resumo] : undefined,
 				},
 				{ provedor: provedorAtivo },
 			)
@@ -251,9 +309,32 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 			await guardarResposta(resposta)
 
 			if (resposta.acoes.length > 0) {
-				const { avaliacoes, erroDoLote } = avaliarLote(resposta.acoes, prefs.autonomia)
+				/*
+				 * Lotes precisam do TOTAL antes da prévia.
+				 *
+				 * O modelo propõe um filtro; quem sabe quantos itens casam é o
+				 * banco. Sem esta contagem, a prévia diria "as tarefas que
+				 * casarem" e a escada de risco não teria como subir para
+				 * "confirmar-forte" — que é justamente a proteção dos lotes
+				 * grandes.
+				 */
+				const comTotal = await Promise.all(
+					resposta.acoes.map(async (acao) => {
+						if (acao.tipo !== 'lote_tarefas') return acao
+						const filtro = acao.dados.filtro as Parameters<typeof selecionarTarefas>[1] | undefined
+						if (!filtro) return acao
+						const tarefas = await db.tasks.toArray()
+						const total = selecionarTarefas(tarefas, filtro).length
+						return { ...acao, dados: { ...acao.dados, totalDoLote: total } }
+					}),
+				)
+
+				const { avaliacoes, erroDoLote } = avaliarLote(comTotal, prefs.autonomia)
 				if (erroDoLote) setErro(erroDoLote)
-				else setPendente({ avaliacoes, mensagem: resposta.mensagem })
+				else {
+					setRecusadas(new Set())
+					setPendente({ avaliacoes, mensagem: resposta.mensagem })
+				}
 			}
 		} catch (causa) {
 			setErro(causa instanceof Error ? causa.message : 'Falha ao falar com a IA.')
@@ -271,7 +352,7 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 			meta: { acoes: resposta.acoes.length },
 		}
 		setMensagens((atuais) => [...atuais, dela])
-		await db.aiChat.put(dela)
+		await db.aiChat.put({ ...dela, sessao })
 	}
 
 	/**
@@ -306,9 +387,15 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 
 	async function confirmar(): Promise<void> {
 		if (!pendente) return
-		const permitidas = pendente.avaliacoes.filter((avaliacao) => avaliacao.risco !== 'proibido')
+		// Só as marcadas. Antes o lote era tudo-ou-nada: para recusar uma
+		// sugestão era preciso recusar todas e pedir de novo.
+		const escolhidas = pendente.avaliacoes.filter(
+			(avaliacao, indice) =>
+				avaliacao.risco !== 'proibido' && !recusadas.has(indice),
+		)
+		const permitidas = escolhidas
 		if (permitidas.length === 0) {
-			setErro('Nenhuma ação podia ser executada.')
+			setErro('Nenhuma ação foi marcada. Nada foi feito.')
 			setPendente(null)
 			return
 		}
@@ -330,7 +417,7 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 						: (resultado.erro ?? 'Nada foi feito.'),
 			}
 			setMensagens((atuais) => [...atuais, aviso])
-			await db.aiChat.put(aviso)
+			await db.aiChat.put({ ...aviso, sessao })
 			setLoteDesfazer(resultado.loteId)
 		} finally {
 			setCarregando(false)
@@ -354,26 +441,136 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 			texto: resultado.ok ? 'Desfeito. Tudo voltou ao estado anterior.' : (resultado.erro ?? 'Não foi possível desfazer.'),
 		}
 		setMensagens((atuais) => [...atuais, aviso])
-		await db.aiChat.put(aviso)
+		await db.aiChat.put({ ...aviso, sessao })
 	}
 
 	return (
 		<div className="tela tela--conversa">
 			<Topo
 				titulo="Jarvis"
-				sobre="Conversa com o resumo do app. Notas e desenhos não saem do aparelho."
+				sobre={
+					sessoes.length > 1
+						? `${sessoes.length} conversas · a mais antiga sai quando a quarta abre`
+						: 'Conversa com o resumo do app. Notas livres não saem do aparelho.'
+				}
 				acoes={
-					<button
-						type="button"
-						className="botao-icone"
-						aria-label="Voltar"
-						title="Voltar"
-						onClick={onVoltar}
-					>
-						<IconeVoltar size={22} />
-					</button>
+					<>
+						<button
+							type="button"
+							className="botao-icone"
+							aria-label="Conversas"
+							title="Conversas"
+							aria-expanded={menuConversas}
+							onClick={() => setMenuConversas((aberto) => !aberto)}
+						>
+							<IconeConversas size={22} />
+						</button>
+						<button
+							type="button"
+							className="botao-icone"
+							aria-label="Voltar"
+							title="Voltar"
+							onClick={onVoltar}
+						>
+							<IconeVoltar size={22} />
+						</button>
+					</>
 				}
 			/>
+
+			{/*
+			 * Menu de conversas.
+			 *
+			 * Fica aqui, e não numa tela de Ajustes: trocar de conversa é parte
+			 * do uso, não configuração. Lista as três, marca a aberta e oferece
+			 * "Nova conversa" — que apaga a mais antiga quando já há três.
+			 */}
+			{menuConversas ? (
+				<div className="conversa-menu" role="dialog" aria-label="Conversas">
+					<div className="conversa-menu__caixa">
+						<p className="conversa-menu__titulo">Conversas</p>
+
+						<ul className="conversa-menu__lista">
+							{sessoes.map((item) => (
+								<li key={item.id}>
+									<button
+										type="button"
+										className={
+											item.id === sessao
+												? 'conversa-menu__item conversa-menu__item--ativa'
+												: 'conversa-menu__item'
+										}
+										onClick={() => {
+											void (async () => {
+												await abrirSessao(item.id, db)
+												setMenuConversas(false)
+												await carregarConversa()
+											})()
+										}}
+									>
+										<span className="conversa-menu__nome">{item.titulo}</span>
+										<span className="conversa-menu__meta">
+											{item.mensagens === 0
+												? 'vazia'
+												: `${item.mensagens} ${item.mensagens === 1 ? 'mensagem' : 'mensagens'}`}
+										</span>
+									</button>
+								</li>
+							))}
+						</ul>
+
+						<div className="conversa-menu__acoes">
+							<button
+								type="button"
+								className="botao botao--texto"
+								onClick={() => setMenuConversas(false)}
+							>
+								Fechar
+							</button>
+							<button
+								type="button"
+								className="botao botao--secundario"
+								onClick={() => {
+									void (async () => {
+										if (sessoes.filter((item) => item.mensagens > 0).length >= 3) {
+											const confirmado = window.confirm(
+												'Abrir uma conversa nova apaga a mais antiga, com as mensagens dela. Continuar?',
+											)
+											if (!confirmado) return
+										}
+										await novaSessao(db)
+										setMenuConversas(false)
+										await carregarConversa()
+									})()
+								}}
+							>
+								Nova conversa
+							</button>
+							<button
+								type="button"
+								className="botao botao--primario"
+								onClick={() => {
+									void (async () => {
+										if (mensagens.length === 0) {
+											setMenuConversas(false)
+											return
+										}
+										const confirmado = window.confirm(
+											'Limpar esta conversa? As mensagens dela serão apagadas.',
+										)
+										if (!confirmado) return
+										await apagarSessao(sessao, db)
+										setMenuConversas(false)
+										await carregarConversa()
+									})()
+								}}
+							>
+								Limpar
+							</button>
+						</div>
+					</div>
+				</div>
+			) : null}
 
 			<div className="conteudo conteudo--conversa">
 				<div className="conversa">
@@ -415,18 +612,30 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 							</p>
 						) : (
 							<ul className="conversa__lista">
-								{mensagens.map((mensagem) => (
-									<li
-										key={mensagem.id}
-										className={
-											mensagem.papel === 'usuario'
-												? 'conversa__fala conversa__fala--minha'
-												: 'conversa__fala'
-										}
-									>
-										{mensagem.texto}
-									</li>
-								))}
+								{mensagens.map((mensagem) => {
+									// Mensagem que veio da ilha: marca discreta para o
+									// usuário reconhecer o que ele só "dispensou" na tela.
+									const daIlha =
+										!!mensagem.meta &&
+										typeof mensagem.meta === 'object' &&
+										(mensagem.meta as { origem?: string }).origem === 'ilha'
+
+									return (
+										<li
+											key={mensagem.id}
+											className={
+												mensagem.papel === 'usuario'
+													? 'conversa__fala conversa__fala--minha'
+													: daIlha
+														? 'conversa__fala conversa__fala--ilha'
+														: 'conversa__fala'
+											}
+										>
+											{daIlha ? <span className="conversa__selo">da ilha</span> : null}
+											{mensagem.texto}
+										</li>
+									)
+								})}
 							</ul>
 						)}
 
@@ -447,9 +656,9 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 								<button
 									type="button"
 									className="botao botao--texto"
-									onClick={() => navigate({ name: 'ajustes' })}
+									onClick={() => navigate({ name: 'ajustes-ia' })}
 								>
-									Abrir Ajustes
+									Abrir ajustes de IA
 								</button>
 							</div>
 						) : null}
@@ -520,7 +729,7 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 					pendente
 						? `${pendente.avaliacoes.length} ${
 								pendente.avaliacoes.length === 1 ? 'ação proposta' : 'ações propostas'
-							} · dá para desfazer por 24 h`
+							} · ${selecionadas} marcada${selecionadas === 1 ? '' : 's'} · dá para desfazer por 24 h`
 						: undefined
 				}
 				rodape={
@@ -537,9 +746,15 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 							type="button"
 							className="botao botao--primario"
 							onClick={() => void confirmar()}
-							disabled={carregando}
+							disabled={carregando || selecionadas === 0}
 						>
-							{carregando ? 'Fazendo…' : 'Fazer'}
+							{carregando
+								? 'Fazendo…'
+								: selecionadas === 0
+									? 'Marque uma ação'
+									: selecionadas === 1
+										? 'Fazer 1 ação'
+										: `Fazer ${selecionadas} ações`}
 						</button>
 					</>
 				}
@@ -548,32 +763,78 @@ export function ConversaJarvis({ semente, onVoltar }: Props) {
 					<div className="formulario conversa__confirmacao">
 						{pendente.mensagem ? <p>{pendente.mensagem}</p> : null}
 
+						<p className="nota">
+							Desmarque o que você não quer. As ações não escolhidas não
+							acontecem — não precisa pedir tudo de novo.
+						</p>
+
 						<ul className="conversa__previa-lista">
-							{pendente.avaliacoes.map((avaliacao, indice) => (
-								<li key={indice} className="conversa__previa">
-									<span
+							{pendente.avaliacoes.map((avaliacao, indice) => {
+								const proibida = avaliacao.risco === 'proibido'
+								const marcada = !proibida && !recusadas.has(indice)
+								return (
+									<li
+										key={indice}
 										className={
-											avaliacao.risco === 'proibido'
-												? 'jarvis-selo jarvis-selo--urgente'
-												: avaliacao.risco === 'livre'
-													? 'jarvis-selo jarvis-selo--informativo'
-													: 'jarvis-selo jarvis-selo--atencao'
+											marcada
+												? 'conversa__previa conversa__previa--marcada'
+												: 'conversa__previa'
 										}
 									>
-										{avaliacao.risco === 'proibido'
-											? 'Recusada'
-											: avaliacao.risco === 'livre'
-												? 'Permitida'
-												: 'Confirmação'}
-									</span>
-									<p>
-										{avaliacao.risco === 'proibido' ? avaliacao.recusa : avaliacao.previa}
-									</p>
-									{avaliacao.acao.motivo ? (
-										<p className="nota">Motivo: {avaliacao.acao.motivo}</p>
-									) : null}
-								</li>
-							))}
+										{/*
+										 * O <label> envolve TAMBÉM o texto da prévia.
+										 * Antes ele cobria só o selo: tocar na frase que
+										 * descreve a ação — que é a parte que a pessoa lê
+										 * para decidir — não marcava nada. O CSS ampliava a
+										 * área com `::after`, mas área sem rótulo associado
+										 * não resolve para leitor de tela.
+										 */}
+										<label className="conversa__previa-escolha">
+											<span className="conversa__previa-topo">
+											<input
+												type="checkbox"
+												checked={marcada}
+												disabled={proibida || carregando}
+												aria-label={`Incluir ação: ${
+													proibida ? avaliacao.recusa : avaliacao.previa
+												}`}
+												onChange={() =>
+													setRecusadas((atuais) => {
+														const proximo = new Set(atuais)
+														if (proximo.has(indice)) proximo.delete(indice)
+														else proximo.add(indice)
+														return proximo
+													})
+												}
+											/>
+											<span
+												className={
+													proibida
+														? 'jarvis-selo jarvis-selo--urgente'
+														: avaliacao.risco === 'livre'
+															? 'jarvis-selo jarvis-selo--informativo'
+															: 'jarvis-selo jarvis-selo--atencao'
+												}
+											>
+												{proibida
+													? 'Recusada'
+													: avaliacao.risco === 'livre'
+														? 'Permitida'
+														: avaliacao.risco === 'confirmar-forte'
+															? 'Lote grande'
+															: 'Confirmação'}
+											</span>
+											</span>
+											<span className="conversa__previa-texto">
+												{proibida ? avaliacao.recusa : avaliacao.previa}
+											</span>
+										</label>
+										{avaliacao.acao.motivo ? (
+											<p className="nota">Motivo: {avaliacao.acao.motivo}</p>
+										) : null}
+									</li>
+								)
+							})}
 						</ul>
 					</div>
 				) : null}

@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   Nexo — componentes base, na linguagem do Grit (Material 3 Expressive).
+   Urdume — componentes base, na linguagem do Grit (Material 3 Expressive).
 
    Regras que valem para tudo:
    - superfície = `--surface-container*`, nunca branco chapado sobre branco;
@@ -30,7 +30,7 @@ body {
 	display: flex;
 	flex-direction: column;
 	padding-top: env(safe-area-inset-top);
-	min-height: 100dvh;
+	min-height: var(--altura-visivel, 100dvh);
 	/* min-width: 0 impede que um filho de conteúdo largo (chips, texto sem
 	   quebra) aumente a largura da tela dentro de um contêiner flex. */
 	width: 100%;
@@ -44,6 +44,11 @@ body {
 	min-width: 0;
 	max-width: var(--content-max);
 	margin: 0 auto;
+	/* O vão entre o cabeçalho e o primeiro bloco era decidido por `style` inline
+	   em CINCO telas: `paddingTop: 0` em Início, Hábitos e Agenda; `--s-3` em
+	   Tarefas; nada em Projetos, Páginas, Ajustes, Projeto e Jarvis. Agora é um
+	   padrão só, e o inline (que vence a classe) fica como exceção explícita. */
+	padding-top: var(--s-3);
 	/*
 	 * Espaço para a barra + a pilha de botões flutuantes + respiro do gesto.
 	 *
@@ -52,18 +57,33 @@ body {
 	 * da barra. Com os 80 antigos, o último cartão de uma lista ficava com os
 	 * botões de ação debaixo do FAB — acontecia nas anotações do projeto.
 	 */
-	padding-bottom: calc(var(--nav-h) + 132px + env(safe-area-inset-bottom));
+	/*
+	 * A conta agora inclui o FAB inteiro MAIS uma faixa de respiro.
+	 *
+	 * 132 px era exatamente a altura da pilha (44 + 12 + 56 + 16). Sem folga,
+	 * o último elemento da tela encostava na borda do botão e, no Início, o
+	 * "Abrir dia" da Agenda ficava por baixo dele. Aqui: pilha + 24 de folga.
+	 * O valor tem de acompanhar `.fab` e `.fab-area` se o tamanho mudar.
+	 */
+	padding-bottom: calc(var(--nav-h) + 156px + env(safe-area-inset-bottom));
 }
 
 .conteudo--sem-fab {
 	padding-bottom: calc(var(--nav-h) + 24px + env(safe-area-inset-bottom));
 }
 
+
 /* ------------------------------------------------------------------ app bar */
 
 .topo {
 	position: sticky;
-	top: 0;
+	/*
+	 * `top: 0` fazia o cabeçalho grudar no topo FÍSICO da tela e passar por
+	 * baixo da barra de status quando a página rolava (o app desenha atrás das
+	 * barras). O recuo da safe area resolve no aparelho e não muda nada onde
+	 * não há entalhe: `env()` vale 0.
+	 */
+	top: env(safe-area-inset-top);
 	z-index: 20;
 	display: flex;
 	align-items: flex-start;
@@ -71,7 +91,22 @@ body {
 	width: 100%;
 	max-width: var(--content-max);
 	margin: 0 auto;
+	/* Um único padding de cabeçalho para as 11 telas. Antes o Início usava
+	   `8 16` e as outras `12 16 8`: a mesma barra media 7 px diferente e a
+	   tela trocava de altura ao navegar. */
 	padding: var(--s-3) var(--s-4) var(--s-2);
+	/*
+	 * SEM reserva de espaço para a ilha do Jarvis.
+	 *
+	 * Antes havia um `padding-top` calculado a partir da altura da ilha: cada
+	 * recado empurrava o conteúdo ~90 px para baixo e, ao recolher, puxava de
+	 * volta. O usuário descreveu como "empurra todo o conteúdo e buga áreas" —
+	 * e é exatamente isso: um overlay nunca deve alterar o fluxo.
+	 *
+	 * A ilha vive numa faixa própria no topo (ver `.ilha-area` em ilha.css),
+	 * com largura de conteúdo, então ela não cobre o título e não precisa de
+	 * espaço reservado.
+	 */
 	/*
 	 * Fundo quase sólido, e não 88%.
 	 *
@@ -81,17 +116,42 @@ body {
 	 * enquanto se rola. Sólido com uma pitada de cor resolve nos dois casos:
 	 * com desfoque fica bonito, sem desfoque fica legível.
 	 */
+	background: var(--surface-container);
 	background: color-mix(in srgb, var(--background) 97%, var(--surface-container));
 	backdrop-filter: blur(18px) saturate(1.3);
 	-webkit-backdrop-filter: blur(18px) saturate(1.3);
 }
 
+/*
+ * A faixa da barra de status.
+ *
+ * Com `top: env(safe-area-inset-top)` o cabeçalho para abaixo da barra, mas o
+ * conteúdo continua rolando POR BAIXO da faixa, e o texto aparecia por cima do
+ * relógio e dos ícones do sistema. Este bloco pinta exatamente a faixa, com o
+ * mesmo fundo do topo, e o conteúdo some atrás dele como deve.
+ */
+.topo::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 100%;
+	height: env(safe-area-inset-top);
+	background: inherit;
+	backdrop-filter: inherit;
+	-webkit-backdrop-filter: inherit;
+	pointer-events: none;
+}
+
 /* Início: marca e ações na mesma linha, data embaixo da marca em corpo pequeno.
    Antes esta tela empilhava marca + título "Hoje" de 30 px + data, e o topo
-   ocupava ~133 px; agora ocupa uma linha de 48 px e a data. */
+   ocupava ~133 px; agora ocupa uma linha de 48 px e a data.
+
+   O padding é o MESMO das outras telas (`--s-3`/`--s-2` no eixo vertical). A
+   diferença de 4 px que existia aqui tirava a barra do lugar ao trocar de aba;
+   o que distingue o Início é a marca no lugar do título, não a altura. */
 .topo--inicio {
 	align-items: center;
-	padding: var(--s-2) var(--s-4);
 }
 
 .topo__linha--marca {
@@ -102,8 +162,12 @@ body {
 .topo__marca-bloco {
 	display: flex;
 	flex-direction: column;
+	justify-content: center;
 	gap: 1px;
 	min-width: 0;
+	/* A marca não tem mais a data embaixo; centralizar mantém a linha óptica
+	   com os botões de ação ao lado, que medem 44 px. */
+	min-height: var(--toque);
 }
 
 .topo__data {
@@ -134,7 +198,7 @@ body {
 .marca {
 	display: inline-flex;
 	align-items: center;
-	gap: 8px;
+	gap: var(--s-2);
 	color: var(--on-surface);
 }
 
@@ -147,14 +211,11 @@ body {
    kit é a referência de peso e tracking. */
 .marca__palavra {
 	font-family: var(--font);
-	font-size: 21px;
-	font-weight: 600;
+	/* Um degrau acima do título: a assinatura acompanha "Tamanho do texto". */
+	font-size: calc(var(--text-title) + 2px);
+	font-weight: var(--w-semibold);
 	letter-spacing: -0.028em;
 	line-height: 1;
-}
-
-.topo--rolado {
-	background: color-mix(in srgb, var(--surface-container) 92%, transparent);
 }
 
 .topo__texto {
@@ -200,15 +261,19 @@ body {
 	align-items: center;
 	justify-content: space-between;
 	gap: var(--s-3);
-	min-height: 32px;
-	padding: 0 2px;
+	/* 44 e não 32: o `.secao-acao` que mora aqui dentro tem 40 px de altura e
+	   o contêiner declarava 32 — a barra crescia para 40 de qualquer jeito, mas
+	   o valor mentia sobre a intenção e desalinhava o título de seções com e
+	   sem ação. */
+	min-height: var(--toque);
+	padding: 0;
 	margin-bottom: var(--s-2);
 }
 
 .secao-titulo {
 	display: flex;
 	align-items: center;
-	gap: 7px;
+	gap: var(--s-1-5);
 	font-size: var(--text-title);
 	font-weight: var(--w-bold);
 	letter-spacing: -0.025em;
@@ -246,18 +311,23 @@ body {
 .secao-acao {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
-	min-height: 40px;
+	gap: var(--s-1-5);
+	min-height: var(--toque);
 	padding: 0 var(--s-3);
 	border-radius: var(--r-pill);
-	color: var(--primary);
+	/* `--on-accent`, não `--primary`: o acento puro dá 2,63–3,15:1 como letra.
+	   O token é a mesma matiz um degrau mais escura (5,39:1 no claro). */
+	color: var(--on-accent);
 	font-size: var(--text-sm);
 	font-weight: var(--w-bold);
-	transition: background var(--dur) var(--ease);
+	transition:
+		background var(--dur) var(--ease),
+		transform var(--dur-fast) var(--ease);
 }
 
 .secao-acao:active {
 	background: color-mix(in srgb, var(--primary) 14%, transparent);
+	transform: scale(0.97);
 }
 
 /* ---------------------------------------------------------------- cartões */
@@ -266,11 +336,6 @@ body {
 	border-radius: var(--r-2xl);
 	background: var(--surface-container);
 	overflow: hidden;
-}
-
-.cartao--destaque {
-	background: var(--primary-container);
-	color: var(--on-primary-container);
 }
 
 .cartao--vazio {
@@ -292,8 +357,8 @@ body {
 .vazio__icone {
 	display: grid;
 	place-items: center;
-	width: 44px;
-	height: 44px;
+	width: var(--toque);
+	height: var(--toque);
 	border-radius: var(--r-lg);
 	background: var(--surface-container-high);
 	color: var(--on-surface-variant);
@@ -307,19 +372,26 @@ body {
 	overflow: hidden;
 }
 
-.linha-grupo--solto {
-	overflow: visible;
-}
-
 .linha {
 	position: relative;
 	display: flex;
 	align-items: center;
 	gap: var(--s-3);
 	width: 100%;
-	min-height: 60px;
+	/* Uma altura de linha para todas as listas do app. Havia 60 aqui, 64 em
+	   Ajustes e Páginas, 52 na busca e 44 no marco — quatro famílias para o
+	   mesmo gesto. 60 é o que cabe título + meta com respiro de dedo. */
+	min-height: var(--linha-h);
 	padding: var(--s-3) var(--s-4);
 	text-align: left;
+	transition: background var(--dur) var(--ease);
+}
+
+/* O componente mais usado do app não tinha retorno de toque: em Início,
+   PainelDoDia, Páginas e Ajustes a navegação acontecia sem nenhum sinal antes.
+   Mesma técnica do `.linha-ajuste--entrada`, que já fazia certo. */
+.linha:active {
+	background: var(--surface-container-high);
 }
 
 .linha + .linha::before {
@@ -328,20 +400,16 @@ body {
 	top: 0;
 	left: var(--s-4);
 	right: 0;
-	height: 1px;
-	background: var(--outline-variant);
+	height: var(--hairline);
+	background: var(--divisor);
 	opacity: 0.6;
-}
-
-.linha--sem-divisor::before {
-	display: none !important;
 }
 
 .linha__icone {
 	display: grid;
 	place-items: center;
-	width: 28px;
-	height: 28px;
+	width: var(--s-8);
+	height: var(--s-8);
 	border-radius: 0;
 	background: none;
 	color: var(--on-surface-variant);
@@ -377,18 +445,20 @@ body {
 	min-height: 18px;
 }
 
-.linha__meta .pendurada {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-}
-
 .linha__chevron {
 	color: var(--on-surface-variant);
 	flex-shrink: 0;
 }
 
 .linha--concluida .linha__titulo {
+	color: var(--on-surface-variant);
+	text-decoration: line-through;
+	text-decoration-thickness: 1.5px;
+}
+
+/* Título riscado sem ser uma linha concluída (Calendário: tarefa feita dentro
+   da folha do dia). A classe existia no TSX sem CSS e o texto saía normal. */
+.linha__titulo--riscado {
 	color: var(--on-surface-variant);
 	text-decoration: line-through;
 	text-decoration-thickness: 1.5px;
@@ -401,7 +471,7 @@ body {
 	align-items: center;
 	justify-content: center;
 	gap: var(--s-2);
-	min-height: 48px;
+	min-height: var(--s-12);
 	padding: 0 var(--s-6);
 	border-radius: var(--r-pill);
 	background: var(--secondary-container);
@@ -428,15 +498,38 @@ body {
 	color: var(--on-primary);
 }
 
+/* Variante secundária: mesma forma do botão, superfície em vez de cor. Era
+   usada em 3 lugares do Jarvis sem CSS nenhum — caía no `.botao` genérico e
+   ficava idêntica ao botão de ação, sem hierarquia. */
+.botao--secundario {
+	background: var(--surface-container-high);
+	color: var(--on-surface);
+}
+
 .botao--texto {
-	min-height: 40px;
+	min-height: var(--toque);
 	padding: 0 var(--s-3);
 	background: transparent;
-	color: var(--primary);
+	color: var(--on-accent);
 }
 
 .botao--texto:active {
 	background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+/* Botão que ocupa a largura toda, dentro de um bloco de conteúdo. */
+.botao--largo {
+	width: 100%;
+	justify-content: center;
+}
+
+/* Variante compacta: o rótulo encolhe, o ALVO não. Usada em `AvisoNoTopo`, que
+   declarava `botao--compacto` e não tinha CSS — o botão caía no tamanho padrão
+   de 40 px dentro de uma faixa de aviso de 56. */
+.botao--compacto {
+	min-height: var(--toque);
+	padding: 0 var(--s-2);
+	font-size: var(--text-xs);
 }
 
 .botao--perigo {
@@ -454,10 +547,11 @@ body {
 }
 
 .botao-icone {
+	position: relative;
 	display: grid;
 	place-items: center;
-	width: 44px;
-	height: 44px;
+	width: var(--toque);
+	height: var(--toque);
 	border-radius: var(--r-pill);
 	color: var(--on-surface-variant);
 	flex-shrink: 0;
@@ -472,19 +566,26 @@ body {
 	transform: scale(0.94);
 }
 
+/* O desenho é de 36 px; o ALVO é de 44. Inflar o botão para 44 em toda linha
+   de lista roubava 8 px por ícone do título (eram 18 ações), e o desenho
+   grande não é o que faltava: era a área do dedo. O `::after` cobre os 4 px de
+   folga de cada lado sem mexer no layout. */
 .botao-icone--pequeno {
-	width: 36px;
-	height: 36px;
+	position: relative;
+	width: var(--toque-desenho);
+	height: var(--toque-desenho);
+}
+
+.botao-icone--pequeno::after {
+	content: '';
+	position: absolute;
+	inset: calc((var(--toque-desenho) - var(--toque)) / 2);
+	border-radius: inherit;
 }
 
 .botao-icone[aria-pressed='true'] {
 	background: var(--primary-container);
 	color: var(--on-primary-container);
-}
-
-.botao-icone--destaque {
-	background: var(--primary);
-	color: var(--on-primary);
 }
 
 /* ------------------------------------------------------------------ chips */
@@ -506,7 +607,9 @@ body {
 	min-width: 0;
 	max-width: var(--content-max);
 	margin: 0 auto;
-	padding: 2px var(--s-4);
+	/* `2px 16px` → `4px 16px`: com 2 px o anel de foco e a sombra do chip ativo
+	   ficavam cortados pelo `overflow-y: hidden`. */
+	padding: var(--s-1) var(--s-4);
 	scroll-snap-type: x proximity;
 	overscroll-behavior-x: contain;
 }
@@ -518,9 +621,12 @@ body {
 .chip {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--s-1-5);
 	flex-shrink: 0;
-	min-height: 40px;
+	/* 40px era o mínimo e reprovava no alvo de toque (44). O chip é escolha
+	   frequente — filtro, sugestão, estilo de paleta — e errar o toque num
+	   filtro não tem desfazer. */
+	min-height: var(--toque);
 	padding: 0 var(--s-4);
 	border-radius: var(--r-pill);
 	background: var(--surface-container-high);
@@ -531,7 +637,12 @@ body {
 	scroll-snap-align: start;
 	transition:
 		background var(--dur) var(--ease),
-		color var(--dur) var(--ease);
+		color var(--dur) var(--ease),
+		transform var(--dur-fast) var(--ease);
+}
+
+.chip:active {
+	transform: scale(0.97);
 }
 
 .chip[aria-pressed='true'],
@@ -541,21 +652,28 @@ body {
 	font-weight: var(--w-bold);
 }
 
-.chip--contorno {
-	background: transparent;
-	border: 1px solid var(--outline);
-}
-
+/* Chip compacto: 28 px de desenho, mas o alvo continua 44. Antes era o menor
+   alvo clicável do app — a barra de ordem/filtro de Tarefas e Projetos vive
+   deles, e 28 px de altura é metade do dedo. O `::after` cresce 8 px para
+   cima e para baixo sem empurrar a fileira. */
 .chip--pequeno {
+	position: relative;
 	min-height: 28px;
 	padding: 0 10px;
 	font-size: var(--text-xs);
 	font-weight: var(--w-semibold);
 }
 
+.chip--pequeno::after {
+	content: '';
+	position: absolute;
+	inset: -8px 0;
+	border-radius: inherit;
+}
+
 .chip__ponto {
-	width: 8px;
-	height: 8px;
+	width: var(--s-2);
+	height: var(--s-2);
 	border-radius: 50%;
 	flex-shrink: 0;
 }
@@ -563,32 +681,54 @@ body {
 .chip--acao {
 	background: transparent;
 	border: 1px dashed var(--outline);
-	color: var(--primary);
+	color: var(--on-accent);
+}
+
+.chip--remover {
+	background: var(--surface-container-highest);
+	color: var(--on-surface);
+	padding-right: var(--s-2);
+	gap: var(--s-1);
+}
+
+.chip--remover svg {
+	opacity: 0.6;
 }
 
 /* -------------------------------------------------------- grupo segmentado */
 
 .segmentado {
 	display: flex;
+	/* `stretch` força os itens a dividirem a largura disponível. Sem isso o
+	   grupo alinhava à esquerda e deixava um vazio à direita — o defeito que o
+	   dono viu nos filtros. */
+	align-items: stretch;
 	padding: 3px;
 	gap: 2px;
-	border-radius: var(--r-pill);
+	border-radius: var(--r-lg);
 	background: var(--surface-container-high);
+	width: 100%;
+	min-width: 0;
 }
 
 .segmentado__item {
-	flex: 1;
+	/* `1 1 0` e não `1`: a base zero é o que faz todos os itens terem a MESMA
+	   largura, em vez de o maior rótulo comer o espaço dos outros. */
+	flex: 1 1 0;
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	gap: 6px;
-	min-width: 44px;
-	min-height: 44px;
-	padding: 0 var(--s-3);
-	border-radius: var(--r-pill);
+	gap: 4px;
+	min-width: 0;
+	min-height: 40px;
+	padding: 0 var(--s-1);
+	border-radius: var(--r-md);
 	font-size: var(--text-sm);
 	font-weight: var(--w-semibold);
 	color: var(--on-surface-variant);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	transition:
 		background var(--dur) var(--ease),
 		color var(--dur) var(--ease);
@@ -602,6 +742,34 @@ body {
 
 .segmentado--baixo {
 	background: var(--surface-container);
+}
+
+/*
+ * Seletor com muitos itens: quebra em mais de uma fileira.
+ *
+ * Cinco provedores de IA não cabem lado a lado com o rótulo legível. Medido a
+ * 412 px: 348 px de grupo davam 67 px por item, e "OpenRouter" precisa de 74 —
+ * aparecia cortado ("OpenRoute") porque o botão usa `flex: 1 1 0` e corta com
+ * reticências. Aqui cada item fica com a largura do próprio texto e a fileira
+ * seguinte recebe o que não coube. Continua um grupo só, com o mesmo alvo.
+ */
+.segmentado--quebra {
+	display: grid;
+	/* Colunas iguais que cabem na largura: a 412 px dão três por fileira, e o
+	   que sobra desce alinhado em vez de esticar sozinho. */
+	grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+}
+
+.segmentado--quebra > .segmentado__item {
+	min-width: 0;
+	padding: 0 var(--s-2);
+}
+
+.segmentado__contagem {
+	font-size: var(--text-xs);
+	font-weight: var(--w-semibold);
+	opacity: 0.7;
+	margin-left: 2px;
 }
 
 /* ---------------------------------------------------------------- campos */
@@ -628,7 +796,7 @@ body {
 	border-radius: var(--r-md);
 	background: var(--surface-container-high);
 	color: var(--on-surface);
-	font-size: 16px;
+	font-size: var(--text-base);
 }
 
 .tela :where(textarea) {
@@ -653,13 +821,13 @@ body {
 
 .campo {
 	width: 100%;
-	min-height: 56px;
+	min-height: var(--toque-grande);
 	padding: 0 var(--s-4);
 	border-radius: var(--r-lg);
 	border: 0;
 	background: var(--surface-container-high);
 	color: var(--on-surface);
-	font-size: 16px;
+	font-size: var(--text-base);
 	font-weight: var(--w-medium);
 	transition:
 		box-shadow var(--dur) var(--ease),
@@ -678,7 +846,7 @@ body {
 }
 
 .campo--compacto {
-	min-height: 44px;
+	min-height: var(--toque);
 	padding: 0 var(--s-3);
 	border-radius: var(--r-md);
 }
@@ -692,7 +860,7 @@ body {
 
 .campo-rotulo {
 	display: block;
-	margin-bottom: 6px;
+	margin-bottom: var(--s-1-5);
 	font-size: var(--text-sm);
 	font-weight: var(--w-semibold);
 	color: var(--on-surface-variant);
@@ -718,14 +886,106 @@ body {
 	padding-top: var(--s-2);
 }
 
+/*
+ * Ações do formulário no fim do conteúdo — sem `sticky`.
+ *
+ * O `sticky` existia para "Salvar/Excluir" não ficarem fora de alcance num
+ * formulário longo com o teclado aberto. Só que a folha já mede
+ * `visualViewport` (a área realmente visível) e o corpo dela rola: com o
+ * teclado aberto, o `sticky` grudava no fundo do *corpo rolável*, e o corpo
+ * ficava do tamanho do conteúdo — o resultado no aparelho era dois botões
+ * flutuando sobre o teclado, sem fundo, parecendo quebrados.
+ *
+ * O problema que o `sticky` resolvia é resolvido de verdade pelo
+ * `--folha-altura`: a folha nunca passa da área visível, então o fim do
+ * conteúdo está sempre alcançável rolando. Aqui só se dá respiro.
+ */
+.folha__corpo form.formulario > .formulario__acoes {
+	margin-top: var(--s-4);
+	padding: var(--s-2) 0 max(var(--s-3), env(safe-area-inset-bottom));
+}
+
 .formulario__acoes .botao {
 	flex: 1;
+}
+
+/* Ações que se separam: excluir à esquerda, salvar à direita. Era uma classe
+   usada em `EditarTarefa` sem CSS, então o "Excluir" ficava no mesmo bloco de
+   botões flexíveis do "Salvar" e os dois cresciam por igual. */
+.formulario__acoes--entre {
+	justify-content: space-between;
+	align-items: center;
+	padding-top: var(--s-2);
+}
+
+.formulario__acoes--entre > .botao {
+	flex: 0 0 auto;
+}
+
+.formulario__acoes--entre > .formulario__acoes {
+	flex: 1;
+	padding-top: 0;
+}
+
+/* Campo e ação na mesma linha (etiqueta + "Adicionar"). */
+.campo-linha {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+}
+
+.campo-linha > .campo {
+	flex: 1;
+	min-width: 0;
+}
+
+/* Faixa de chips de etiqueta dentro de um formulário. Era usada em
+   `EditarTarefa` sem CSS: os chips caíam num `<div>` sem quebra e sem vão. */
+.etiquetas-lista,
+.etiquetas-sugeridas {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--s-2);
+	margin-bottom: var(--s-2);
+}
+
+.etiquetas-sugeridas {
+	margin-top: var(--s-2);
+	margin-bottom: 0;
+}
+
+/* Bloco de confirmação destrutiva dentro de uma folha. */
+.confirmacao {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
+	padding: var(--s-4);
+	border-radius: var(--r-lg);
+	background: var(--error-container);
+	color: var(--on-error-container);
+	font-size: var(--text-sm);
+	line-height: 1.45;
+}
+
+.confirmacao strong {
+	font-weight: var(--w-bold);
 }
 
 .nota {
 	font-size: var(--text-sm);
 	color: var(--on-surface-variant);
 	line-height: 1.5;
+}
+
+/* Lista com marcador de disco (Sobre, notas longas). Antes era `style` inline
+   com `paddingLeft: 20` e `gap: 6` — dois valores fora da grade no meio de uma
+   tela. */
+.lista-marcada {
+	padding-left: var(--s-5);
+	list-style: disc;
+	display: grid;
+	gap: var(--s-1-5);
 }
 
 .nota--erro {
@@ -745,12 +1005,15 @@ body {
 	position: relative;
 	display: grid;
 	place-items: center;
-	width: 44px;
-	height: 44px;
-	margin-left: -8px;
+	width: var(--toque);
+	height: var(--toque);
+	margin-left: -var(--s-2);
 	flex-shrink: 0;
 	border-radius: 50%;
-	color: var(--primary);
+	/* O anel de 22 px é `currentColor`: `--primary` sobre `surface-container`
+	   dava 2,83:1, e um controle precisa de 3:1 no contorno (WCAG 1.4.11).
+	   `--on-accent` é a mesma matiz, 5,39:1. */
+	color: var(--on-accent);
 	transition: background var(--dur) var(--ease);
 }
 
@@ -764,7 +1027,7 @@ body {
 	width: 22px;
 	height: 22px;
 	border-radius: 50%;
-	border: 2px solid currentColor;
+	border: var(--traco) solid currentColor;
 	transition:
 		background var(--dur) var(--ease),
 		border-color var(--dur) var(--ease),
@@ -790,10 +1053,13 @@ body {
 	transform: scale(1);
 }
 
+/* Variante compacta: a MARCA é 18 px, o alvo continua 44. Antes o botão
+   inteiro encolhia para 32 e ficava abaixo do mínimo — numa subtarefa, que é
+   justamente onde o dedo erra mais. */
 .checkbox--pequeno {
-	width: 32px;
-	height: 32px;
-	margin-left: -4px;
+	width: var(--toque);
+	height: var(--toque);
+	margin-left: -11px;
 }
 
 .checkbox--pequeno .checkbox__marca {
@@ -806,9 +1072,9 @@ body {
 .etiqueta {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: var(--s-1);
 	min-height: 22px;
-	padding: 0 8px;
+	padding: 0 var(--s-2);
 	border-radius: var(--r-sm);
 	background: var(--surface-container-highest);
 	color: var(--on-surface-variant);
@@ -839,14 +1105,21 @@ body {
 	color: var(--prioridade-3);
 }
 
-.etiqueta--hoje {
-	background: var(--primary-container);
-	color: var(--on-primary-container);
+/* Tipo da tarefa: lembrete e ideia precisam se distinguir de tarefa comum
+   sem gritar. A cor é suave; a palavra é que informa. */
+.etiqueta--tipo {
+	background: color-mix(in srgb, var(--secondary-container) 80%, transparent);
+	color: var(--on-secondary-container);
 }
 
-.etiqueta--suave {
-	background: color-mix(in srgb, var(--tertiary-container) 70%, transparent);
+.etiqueta--tipo[data-tipo='lembrete'] {
+	background: color-mix(in srgb, var(--tertiary-container) 80%, transparent);
 	color: var(--on-tertiary-container);
+}
+
+.etiqueta--tipo[data-tipo='ideia'] {
+	background: color-mix(in srgb, var(--surface-container-highest) 90%, transparent);
+	color: var(--on-surface-variant);
 }
 
 /* ------------------------------------------------------------------- FAB */
@@ -857,12 +1130,17 @@ body {
 .fab-area {
 	position: fixed;
 	right: max(var(--s-4), calc((100vw - var(--content-max)) / 2 + var(--s-4)));
-	bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom));
-	z-index: 30;
+	bottom: calc(var(--nav-h) + 10px + env(safe-area-inset-bottom));
+	/* Acima do `.desfazer` (45): com o aviso na tela ele cobria 28 dos 44 px
+	   do botão de conversar, e o de criar ficava a 16 px de um alvo errado. */
+	z-index: 46;
 	display: flex;
 	flex-direction: column;
 	align-items: flex-end;
-	gap: var(--s-3);
+	/* 8 e não 12: com dois botões de 48, o vão de 12 somado à folga de 16 da
+	   barra fazia a pilha subir 148 px — no Início ela encostava no cartão de
+	   hábitos e lia como "botões soltos no meio da tela". */
+	gap: var(--s-2);
 }
 
 /* O botão é compacto por decisão de conteúdo, não por estilo: com o rótulo ao
@@ -874,8 +1152,8 @@ body {
 	align-items: center;
 	justify-content: center;
 	gap: 0;
-	width: 48px;
-	height: 48px;
+	width: var(--s-12);
+	height: var(--s-12);
 	padding: 0;
 	border-radius: var(--r-lg);
 	background: var(--primary-container);
@@ -918,17 +1196,17 @@ body {
 	pointer-events: none;
 }
 
+/*
+ * A pilha não sobe mais por causa de conteúdo: o `padding-bottom` do
+ * `.conteudo` (156 px) já reserva a faixa dos dois botões. A regra anterior
+ * subia 72 px extras quando havia cartão de vazio, e no aparelho os dois FABs
+ * ficavam altos, soltos no meio da lista.
+ */
+
+
+
 .fab:active {
 	transform: scale(0.95);
-}
-
-.fab--pequeno {
-	height: 52px;
-	padding: 0 var(--s-4);
-	border-radius: var(--r-lg);
-	background: var(--surface-container-high);
-	color: var(--on-surface);
-	box-shadow: var(--elev-1);
 }
 
 /* ------------------------------------------------------------------ avisos */
@@ -936,7 +1214,17 @@ body {
 .desfazer {
 	position: fixed;
 	left: 50%;
-	bottom: calc(var(--nav-h) + 92px + env(safe-area-inset-bottom));
+	/*
+	 * Acima da PILHA de botões flutuantes, não sobre ela.
+	 *
+	 * A conta antiga (`nav-h + 92`) punha o aviso de 156 a 212 px do rodapé e a
+	 * pilha de 80 a 184 (conversar 44 + vão 12 + criar 48, com 16 de folga da
+	 * barra). Sobrepunha 28 dos 44 px do botão de conversar — e o aviso, com
+	 * `z-index` maior, ficava por cima. Agora a faixa começa 20 px acima do topo
+	 * da pilha: zero sobreposição nos dois eixos, e os dois continuam
+	 * alcançáveis durante os 4 s do aviso.
+	 */
+	bottom: calc(var(--nav-h) + var(--fab-pilha) + var(--s-6) + env(safe-area-inset-bottom));
 	z-index: 45;
 	transform: translateX(-50%);
 	display: flex;
@@ -944,11 +1232,11 @@ body {
 	gap: var(--s-3);
 	width: min(92vw, 420px);
 	padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
-	border-radius: var(--r-md);
+	border-radius: var(--r-lg);
 	background: var(--inverse-surface);
 	color: var(--inverse-on-surface);
 	box-shadow: var(--elev-3);
-	animation: sobe-aviso var(--dur-slow) var(--ease-spring);
+	animation: sobe-aviso var(--dur) var(--ease);
 }
 
 /* Falha de escrita: mesma faixa, em vermelho de erro, para não ser confundida
@@ -967,9 +1255,26 @@ body {
 	white-space: nowrap;
 }
 
+/*
+ * O botão do aviso.
+ *
+ * Antes era `--inverse-primary`, que é o acento do tema claro (#ffb59f) sobre
+ * `--error-container` (#ffdad6): **1,31:1** — o "Fechar" do aviso de erro
+ * simplesmente sumia. Passa a usar `--on-error-container`, o par que o próprio
+ * container de erro garante (13,26:1 no claro, 7,24:1 no escuro). No aviso
+ * normal (fundo inverso) fica `--inverse-primary`, que ali dá 7,75:1.
+ */
 .desfazer .botao--texto {
 	color: var(--inverse-primary);
 	font-weight: var(--w-bold);
+}
+
+/* Depois da regra acima de propósito: mesma especificidade, e é esta que
+   precisa vencer quando o aviso é de erro. */
+.desfazer--erro .botao--texto {
+	color: var(--on-error-container);
+	text-decoration: underline;
+	text-underline-offset: 2px;
 }
 
 @keyframes sobe-aviso {
@@ -992,7 +1297,7 @@ body {
 .esqueleto__linha {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	gap: var(--s-2);
 	padding: var(--s-2) 0;
 }
 
@@ -1036,47 +1341,210 @@ body {
 
 /* Assinatura da marca no fim dos Ajustes: a frase explica o nome, que não é
    dicionário batido, sem ocupar espaço no meio do conteúdo. */
-.rodape-marca {
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	gap: 2px;
-	/* O FAB flutua sobre o conteúdo: sem esta folga a assinatura fica embaixo
-	   dele na tela de Ajustes. */
-	padding: var(--s-2) var(--s-4) calc(96px + env(safe-area-inset-bottom));
-	text-align: center;
-}
-
-.rodape-marca__palavra {
-	font-family: var(--font);
-	font-size: var(--text-sm);
-	font-weight: var(--w-heavy);
-	letter-spacing: -0.028em;
-	color: var(--on-surface);
-}
-
-.rodape-marca__frase {
-	font-size: var(--text-xs);
-	color: var(--on-surface-variant);
-	letter-spacing: 0.01em;
-}
-
 /* -------------------------------------------------- acessibilidade: toque */
 
-/* O alvo mínimo de 44 px fica no ::after para não inflar o desenho. */
-.secao-acao,
-.botao--texto,
-.chip--pequeno {
-	position: relative;
-}
-
-.secao-acao::after,
-.botao--texto::after {
+/* O alvo mínimo de 44 px fica no ::after SÓ onde o desenho é menor que isso.
+   `secao-acao` e `botao--texto` já têm 44 de altura por `min-height` — repetir a
+   expansão aqui só criava sobreposição entre vizinhos empilhados (dois botões
+   de folha, um embaixo do outro, tinham 6 px de área um sobre o outro). */
+.botao-icone--pequeno::after {
 	content: '';
 	position: absolute;
-	inset: -6px -4px;
+	inset: calc((var(--toque-desenho) - var(--toque)) / 2);
 	border-radius: inherit;
 }
+
+/* Os atalhos da tarefa têm o próprio `::after` (6 px), para caber três botões
+   numa linha de 393 sem comer o título. */
+.tarefa__atalho::after {
+	content: '';
+	position: absolute;
+	inset: -6px;
+	border-radius: var(--r-sm);
+}
+
+/* --------------------------------------------------------------- movimento */
+
+/*
+ * Feedback e transições — o pedido de "mais animação, mais fluidez".
+ *
+ * Regras que valem para todas:
+ *   - só `opacity` e `transform` (compostas, sem reflow);
+ *   - interação ≤ 200 ms, entrada de conteúdo ≤ 200 ms;
+ *   - tudo atrás de `prefers-reduced-motion` E do `data-movimento` do app
+ *     (o WebView do Android não repassa a opção do sistema).
+ */
+
+/* Entrada de item de lista.
+   Um deslocamento de 4 px com fade: o suficiente para o olho acompanhar o item
+   chegando, curto o bastante para não atrasar a leitura. O escalonamento é por
+   `nth-child`, limitado aos 8 primeiros — sem índice vindo do React, sem
+   cascata de meio segundo numa lista longa. */
+@keyframes entra-item {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+}
+
+.tarefa,
+.habito,
+.projeto-cartao,
+.busca__resultado,
+.anotacao {
+	animation: entra-item 160ms var(--ease) backwards;
+}
+
+.tarefa:nth-child(2),
+.habito:nth-child(2),
+.projeto-cartao:nth-child(2),
+.busca__resultado:nth-child(2),
+.anotacao:nth-child(2) {
+	animation-delay: 18ms;
+}
+
+.tarefa:nth-child(3),
+.habito:nth-child(3),
+.projeto-cartao:nth-child(3),
+.busca__resultado:nth-child(3),
+.anotacao:nth-child(3) {
+	animation-delay: 36ms;
+}
+
+.tarefa:nth-child(4),
+.habito:nth-child(4),
+.projeto-cartao:nth-child(4),
+.busca__resultado:nth-child(4),
+.anotacao:nth-child(4) {
+	animation-delay: 54ms;
+}
+
+.tarefa:nth-child(5),
+.habito:nth-child(5),
+.projeto-cartao:nth-child(5),
+.busca__resultado:nth-child(5),
+.anotacao:nth-child(5) {
+	animation-delay: 72ms;
+}
+
+.tarefa:nth-child(6),
+.habito:nth-child(6),
+.projeto-cartao:nth-child(6),
+.busca__resultado:nth-child(6),
+.anotacao:nth-child(6) {
+	animation-delay: 90ms;
+}
+
+.tarefa:nth-child(n + 7),
+.habito:nth-child(n + 7),
+.projeto-cartao:nth-child(n + 7),
+.busca__resultado:nth-child(n + 7),
+.anotacao:nth-child(n + 7) {
+	animation-delay: 108ms;
+}
+
+/* Subtarefas abrem em vez de aparecer de salto. */
+.subtarefas {
+	animation: entra-item 160ms var(--ease) backwards;
+}
+
+/* Contador que muda ganha um pulso mínimo: o número trocava de um salto e o
+   usuário não via que tinha mudado. */
+@keyframes pulso-numero {
+	50% {
+		opacity: 0.55;
+	}
+}
+
+.pulso {
+	animation: pulso-numero var(--dur-fast) var(--ease);
+}
+
+/* Confirmação de ação: o botão que executa um comando (criar, concluir,
+   enviar) dá um "assentou" de 120 ms. É `transform`, então não custa layout e
+   não atrasa o toque — o handler dispara no `pointerup` normalmente. */
+@keyframes confirma-acao {
+	40% {
+		transform: scale(0.94);
+	}
+}
+
+.botao--primario:not([disabled]):active,
+.botao--perigo-solido:not([disabled]):active {
+	animation: confirma-acao var(--dur-fast) var(--ease);
+}
+
+/* Confirmação de conclusão: o riscado entra da esquerda em vez de aparecer.
+   `text-decoration` não anima, por isso um `::after` com `scaleX`. */
+.tarefa__titulo,
+.habito__titulo {
+	position: relative;
+	display: inline-block;
+	max-width: 100%;
+}
+
+.tarefa--feita .tarefa__titulo,
+.linha--concluida .linha__titulo {
+	text-decoration: none;
+}
+
+.tarefa--feita .tarefa__titulo::after,
+.linha--concluida .linha__titulo::after {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	height: 1.5px;
+	background: currentColor;
+	transform-origin: left center;
+	animation: risco-entra var(--dur) var(--ease) both;
+}
+
+@keyframes risco-entra {
+	from {
+		transform: scaleX(0);
+	}
+}
+
+/* Entrada de tela: o conteúdo sobe 6 px ao montar. Aplicado no contêiner, e
+   não em cada seção, para não multiplicar animações. */
+@keyframes entra-tela {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+}
+
+.conteudo {
+	animation: entra-tela var(--dur) var(--ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.tarefa,
+	.habito,
+	.projeto-cartao,
+	.busca__resultado,
+	.anotacao,
+	.subtarefas,
+	.conteudo,
+	.pulso,
+	.botao--primario:not([disabled]):active,
+	.botao--perigo-solido:not([disabled]):active {
+		animation: none;
+	}
+
+	.tarefa--feita .tarefa__titulo::after,
+	.linha--concluida .linha__titulo::after {
+		animation: none;
+		transform: none;
+	}
+}
+
+/* Movimento reduzido escolhido no app: o `!important` de `tokens.css` já zera
+   `animation`/`transition` para TUDO. O bloco acima existe porque o
+   `prefers-reduced-motion` do sistema é a outra porta (WebView pode não
+   repassar; o app é quem manda). */
 
 /* --------------------------------------------------------------- desktop */
 
@@ -1099,12 +1567,16 @@ body {
 	justify-content: center;
 	gap: 1px;
 	background: color-mix(in srgb, var(--on-surface) 6%, transparent);
+	/* Reserva sólida: em WebView sem color-mix a borda sumia por inteiro. */
+	border: 1px dashed var(--outline);
 	border: 1px dashed color-mix(in srgb, var(--on-surface-variant) 55%, transparent);
 	color: var(--on-surface-variant);
 }
 
 .amostra-cor__rotulo {
-	font-size: 9px;
+	/* 9 px ficava abaixo de qualquer mínimo legível — era o rótulo "Nova" dentro
+	   de uma amostra de 36. `--text-xs` (11,5) é o menor degrau da escala. */
+	font-size: var(--text-xs);
 	font-weight: var(--w-bold);
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
@@ -1130,7 +1602,7 @@ body {
 }
 
 .seletor-cor__hex-grande {
-	padding: 4px 10px;
+	padding: var(--s-1) 10px;
 	border-radius: var(--r-pill);
 	background: color-mix(in srgb, #000 55%, transparent);
 	color: #fff;
@@ -1144,17 +1616,23 @@ body {
 	display: flex;
 	flex-direction: column;
 	gap: var(--s-2);
+	/* Trilha de 28 px com polegar de 26: o alvo é a faixa inteira da etiqueta
+	   (rótulo + trilha), não os 28 px do desenho. Antes a trilha era o único
+	   lugar onde o dedo acertava. */
+	min-height: var(--toque);
+	justify-content: center;
 }
 
 .seletor-cor__slider {
 	width: 100%;
-	height: 28px;
+	height: 32px;
 	margin: 0;
 	border-radius: var(--r-pill);
 	-webkit-appearance: none;
 	appearance: none;
 	background: var(--surface-container-highest);
 	outline: none;
+	touch-action: none;
 }
 
 .seletor-cor__slider--matiz {
@@ -1170,6 +1648,14 @@ body {
 	);
 }
 
+/* Os três canais têm a mesma trilha; as classes `--saturacao` e `--brilho`
+   existiam no TSX sem CSS (o gradiente vem inline, mas o raio e a borda não). */
+.seletor-cor__slider--saturacao,
+.seletor-cor__slider--brilho {
+	border-radius: var(--r-pill);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-surface) 12%, transparent);
+}
+
 /* Polegar: alto o bastante para o dedo no celular. */
 .seletor-cor__slider::-webkit-slider-thumb {
 	-webkit-appearance: none;
@@ -1178,6 +1664,7 @@ body {
 	height: 26px;
 	border-radius: 50%;
 	background: #fff;
+	border: 2px solid var(--outline);
 	border: 2px solid color-mix(in srgb, #000 25%, transparent);
 	box-shadow: 0 2px 6px color-mix(in srgb, #000 35%, transparent);
 	cursor: pointer;
@@ -1188,6 +1675,7 @@ body {
 	height: 26px;
 	border-radius: 50%;
 	background: #fff;
+	border: 2px solid var(--outline);
 	border: 2px solid color-mix(in srgb, #000 25%, transparent);
 	box-shadow: 0 2px 6px color-mix(in srgb, #000 35%, transparent);
 	cursor: pointer;
@@ -1203,22 +1691,6 @@ body {
 
 .jarvis-atalho {
 	position: relative;
-}
-
-.jarvis-atalho__contagem {
-	position: absolute;
-	top: 2px;
-	right: 2px;
-	min-width: 18px;
-	height: 18px;
-	padding: 0 5px;
-	border-radius: var(--r-pill);
-	background: var(--error);
-	color: var(--on-error);
-	font-size: 11px;
-	font-weight: var(--w-bold);
-	line-height: 18px;
-	text-align: center;
 }
 
 .jarvis-itens {
@@ -1240,10 +1712,15 @@ body {
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
-	gap: 4px;
+	gap: var(--s-1);
 	width: 100%;
 	padding: var(--s-4);
 	text-align: left;
+	transition: background var(--dur) var(--ease);
+}
+
+.jarvis-item__corpo:active {
+	background: var(--surface-container-high);
 }
 
 .jarvis-item__titulo {
@@ -1261,17 +1738,83 @@ body {
 .jarvis-item__acoes {
 	display: flex;
 	justify-content: flex-end;
-	gap: var(--s-1);
+	gap: var(--s-2);
 	padding: 0 var(--s-3) var(--s-2);
+}
+
+/* ---------------------------------------------------------------------------
+   "O Jarvis pensou nisto" — o cartão de sugestão automática.
+
+   A lista de ações avaliadas vem antes dos botões: é a prévia do que vai
+   acontecer se o usuário tocar em "Fazer". Sem marcador de lista e com o texto
+   em corpo secundário, ela lê como uma sequência de consequências, não como
+   um menu. O espaçamento acompanha o resto dos cartões (mesmo `--s-3` entre o
+   texto, a prévia e as ações).
+   --------------------------------------------------------------------------- */
+
+/* "O Jarvis pensou nisto" — o cartão de sugestão automática.
+
+   A lista de ações avaliadas vem antes dos botões: é a prévia do que vai
+   acontecer se o usuário tocar em "Fazer". Sem marcador de lista e com o texto
+   em corpo secundário, ela lê como uma sequência de consequências, não como
+   um menu. O espaçamento acompanha o resto dos cartões (mesmo `--s-3` entre o
+   texto, a prévia e as ações). */
+
+/* O cartão padrão é só uma superfície; conteúdo textual dentro dele precisa do
+   padding que os outros blocos já dão por conta própria. */
+.cartao--texto {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
+	padding: var(--s-4);
+}
+
+.jarvis-sugestao__acoes {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.jarvis-sugestao__acoes li {
+	position: relative;
+	padding-left: var(--s-5);
+	font-size: var(--text-sm);
+	line-height: 1.45;
+	color: var(--on-surface-variant);
+	overflow-wrap: anywhere;
+}
+
+/* Marcador anelar em vez do ponto cheio: diferencia "prévia do que será feito"
+   de "item de lista" sem inventar uma cor nova. */
+.jarvis-sugestao__acoes li::before {
+	content: '';
+	position: absolute;
+	left: var(--s-1);
+	top: calc(0.72em - var(--ponto) / 2);
+	width: var(--ponto);
+	height: var(--ponto);
+	border-radius: 50%;
+	border: var(--traco) solid var(--on-accent);
+}
+
+/* Ações do cartão de sugestão: ocupam a largura e mantêm 8 px entre si — uma
+   delas é "Fazer", que executa; a outra é "Agora não". Vizinhos com peso
+   diferente não podem ficar colados. */
+.jarvis-sugestao__acoes ~ .formulario__acoes {
+	padding-top: 0;
+	gap: var(--s-2);
 }
 
 .jarvis-selo {
 	display: inline-flex;
 	align-items: center;
 	height: 22px;
-	padding: 0 8px;
+	padding: 0 var(--s-2);
 	border-radius: var(--r-pill);
-	font-size: 11px;
+	font-size: var(--text-xs);
 	font-weight: var(--w-bold);
 	letter-spacing: 0.02em;
 	text-transform: uppercase;
@@ -1307,7 +1850,7 @@ body {
 	justify-content: space-between;
 	gap: var(--s-4);
 	padding: var(--s-4) 0;
-	border-bottom: 1px solid var(--outline-variant);
+	border-bottom: var(--hairline) solid var(--divisor);
 }
 
 .jarvis-linha:last-child {
@@ -1339,13 +1882,40 @@ body {
 
 .jarvis-linha input[type='range'] {
 	width: 100%;
+	/* O trilho tem 16px de altura no Chrome; a área tocável precisa ser 44.
+	   `min-height` no range não estica o trilho, mas estica a caixa que
+	   recebe o toque — que é o que importa aqui. */
+	min-height: var(--toque);
 }
 
+/*
+ * Caixa de seleção no padrão do app.
+ *
+ * Estava em 24 px com a pintura nativa do Android (quadrado laranja grande),
+ * que no aparelho destoava de todo o resto — o app usa pílulas e círculos, e o
+ * controle parecia de outro aplicativo. Também era menor que o alvo mínimo:
+ * a linha inteira é tocável, mas o alvo visível precisa parecer tocável.
+ */
 .jarvis-linha input[type='checkbox'] {
-	width: 22px;
-	height: 22px;
+	width: 28px;
+	height: 28px;
 	flex-shrink: 0;
 	accent-color: var(--primary);
+	border-radius: var(--r-sm);
+}
+
+/* Em aparelho com ponteiro grosso, a área de toque da caixa cresce para 44. */
+@media (pointer: coarse) {
+	.jarvis-linha input[type='checkbox'] {
+		position: relative;
+		width: 28px;
+		height: 28px;
+	}
+	.jarvis-linha input[type='checkbox']::after {
+		content: '';
+		position: absolute;
+		inset: -8px;
+	}
 }
 
 .jarvis-horas {
@@ -1358,15 +1928,20 @@ body {
 .jarvis-horas label {
 	display: inline-flex;
 	align-items: center;
-	gap: 6px;
+	gap: var(--s-1-5);
+	min-height: var(--toque);
 	font-size: var(--text-xs);
 	color: var(--on-surface-variant);
 }
 
+/* 36 px de altura era o menor campo do app: num horário de silêncio, digitar
+   dois números num alvo desse tamanho é o que faz o usuário desistir. O campo
+   visível continua compacto (44) — largura preservada para não empurrar a
+   linha. */
 .jarvis-horas input[type='number'] {
-	width: 56px;
-	min-height: 36px;
-	padding: 0 8px;
+	width: 60px;
+	min-height: var(--toque);
+	padding: 0 var(--s-2);
 	border-radius: var(--r-md);
 	background: var(--surface-container-high);
 	color: var(--on-surface);
@@ -1374,9 +1949,22 @@ body {
 	text-align: center;
 }
 
+/* O checkbox nativo de 18 px não cresce por CSS em todos os WebViews; o
+   `::after` da etiqueta garante os 44 de alvo para o dedo. */
+.jarvis-horas__liga {
+	position: relative;
+}
+
+.jarvis-horas__liga::after {
+	content: '';
+	position: absolute;
+	inset: -12px -8px;
+	border-radius: var(--r-sm);
+}
+
 .jarvis-horas__liga input {
-	width: 18px;
-	height: 18px;
+	width: 24px;
+	height: 24px;
 	accent-color: var(--primary);
 }
 
@@ -1408,7 +1996,70 @@ body {
 .jarvis-item__mais {
 	font-size: var(--text-xs);
 	font-weight: var(--w-semibold);
-	color: var(--primary);
+	color: var(--on-accent);
+}
+
+/* ---------------------------------------------------------------------------
+   Observações do Jarvis — recolhidas por padrão.
+
+   A lista crescia com o uso do app e empurrava os controles para fora da
+   tela: quanto mais o app era usado, menos se conseguia configurar a IA. Agora
+   o topo é uma linha que abre e fecha, e o conteúdo só ocupa espaço aberto.
+   --------------------------------------------------------------------------- */
+
+.painel-observacoes__resumo {
+	display: flex;
+	align-items: center;
+	gap: var(--s-3);
+	width: 100%;
+	padding: var(--s-3) var(--s-4);
+	border-radius: var(--r-2xl);
+	background: var(--surface-container);
+	text-align: left;
+	transition: background var(--dur) var(--ease);
+}
+
+.painel-observacoes__resumo:active {
+	background: var(--surface-container-high);
+}
+
+.painel-observacoes__resumo-texto {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 1;
+	min-width: 0;
+}
+
+.painel-observacoes__resumo-texto strong {
+	font-size: var(--text-base);
+	font-weight: var(--w-bold);
+	color: var(--on-surface);
+}
+
+.painel-observacoes__seta {
+	flex-shrink: 0;
+	color: var(--on-surface-variant);
+	transition: transform var(--dur) var(--ease);
+}
+
+.painel-observacoes__explicacao {
+	margin-top: var(--s-3);
+	padding: var(--s-4);
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-2);
+}
+
+.painel-observacoes__explicacao p {
+	font-size: var(--text-sm);
+	line-height: 1.5;
+	color: var(--on-surface-variant);
+}
+
+.painel-observacoes__explicacao strong {
+	color: var(--on-surface);
+	font-weight: var(--w-bold);
 }
 
 /* ---------------------------------------------------------------------------
@@ -1448,7 +2099,9 @@ body {
 	flex-direction: column;
 	flex: 1;
 	min-height: 0;
-	/* Sem o espaço reservado ao FAB: esta tela não tem botão de criar. */
+	/* Sem o espaço reservado ao FAB e sem o `padding-top` das outras telas: o
+	   histórico começa logo abaixo do cabeçalho e o composer ocupa o rodapé. */
+	padding-top: 0;
 	padding-bottom: 0;
 	padding-left: var(--s-4);
 	padding-right: var(--s-4);
@@ -1572,7 +2225,7 @@ body {
 	background: transparent;
 	color: var(--on-surface);
 	font: inherit;
-	font-size: 16px;
+	font-size: var(--text-base);
 	line-height: 1.4;
 	resize: none;
 	overflow-y: auto;
@@ -1654,9 +2307,78 @@ body {
 	padding: var(--s-3) var(--s-4);
 	border-radius: var(--r-lg);
 	background: var(--surface-container);
+	border: 1px solid transparent;
+	transition:
+		border-color var(--dur) var(--ease),
+		opacity var(--dur) var(--ease);
 }
 
-.conversa__previa p {
+/* Ação desmarcada continua visível, mas apagada: o usuário precisa ver o que
+   deixou de fora para conferir a decisão antes de confirmar.
+
+   Antes: `opacity: 0.55` no cartão inteiro. O texto desmarcado caía a 3,59:1 —
+   abaixo de AA, e justamente no texto que precisa ser LIDO para decidir. Agora
+   o cartão fica com a tinta secundária e o contorno esmaece: a hierarquia
+   aparece igual, e o texto fica em 5,27:1. */
+.conversa__previa:not(.conversa__previa--marcada) {
+	color: var(--text-suave);
+}
+
+.conversa__previa:not(.conversa__previa--marcada) p,
+.conversa__previa:not(.conversa__previa--marcada) .conversa__previa-texto {
+	color: var(--text-suave);
+}
+
+.conversa__previa:not(.conversa__previa--marcada) input[type='checkbox'] {
+	opacity: 0.85;
+}
+
+.conversa__previa--marcada {
+	border-color: var(--outline);
+	border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+/* A prévia é uma linha de 44 px de altura, e não os 22 do selo.
+
+   O `<p>` da prévia está FORA do `<label>` (não pode ser movido: o arquivo tem
+   alteração de lógica em paralelo), então tocar no texto não marca a ação. O
+   que este CSS garante é que a faixa clicável tenha a altura cheia do alvo em
+   vez de depender do checkbox de 20 px. Corrigir o resto exige mover o
+   parágrafo para dentro do label — está registrado no relatório. */
+/* Coluna: o texto da prévia faz parte do alvo do toque e do nome acessível. */
+.conversa__previa-escolha {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: var(--s-1-5);
+	width: 100%;
+	min-height: var(--toque);
+	cursor: pointer;
+}
+
+.conversa__previa-topo {
+	display: flex;
+	align-items: center;
+	gap: var(--s-2);
+}
+
+.conversa__previa-escolha::after {
+	content: '';
+	position: absolute;
+	inset: 0 calc(-1 * var(--s-4));
+}
+
+.conversa__previa-escolha input[type='checkbox'] {
+	width: 24px;
+	height: 24px;
+	accent-color: var(--primary);
+	flex-shrink: 0;
+}
+
+.conversa__previa p,
+.conversa__previa-texto {
+	display: block;
 	font-size: var(--text-sm);
 	line-height: 1.5;
 	color: var(--on-surface);
@@ -1674,7 +2396,18 @@ body {
 	padding: var(--s-3) var(--s-4);
 	border-radius: var(--r-lg);
 	background: var(--surface-container-low);
-	border: 1px solid var(--outline-variant);
+	/* `--outline-variant` sozinho dá 1,42:1: como única borda, a caixa
+	   desaparecia. Mistura com a tinta secundária (~2,5:1) sem virar risco. */
+	border: var(--hairline) solid
+		color-mix(in srgb, var(--outline-variant) 60%, var(--on-surface-variant));
+}
+
+/* Corpo da confirmação dentro da folha: só o empilhamento, com o mesmo vão dos
+   outros formulários. A classe existia no TSX sem CSS. */
+.conversa__confirmacao {
+	display: flex;
+	flex-direction: column;
+	gap: var(--s-3);
 }
 
 
@@ -1717,13 +2450,31 @@ body {
 	justify-content: space-between;
 	gap: var(--s-2);
 	padding: 6px 0;
-	border-bottom: 1px solid var(--outline-variant);
+	border-bottom: var(--hairline) solid var(--divisor);
 	font-size: var(--text-sm);
 	color: var(--on-surface);
 }
 
 .jarvis-fatos li:last-child {
 	border-bottom: none;
+}
+
+/*
+ * Linha de memória com metadados (tipo, força, uso, vínculos).
+ *
+ * O bloco de texto empilha em coluna e os controles ficam à direita; sem isto
+ * a força e o vínculo espremiam o texto em telas estreitas.
+ */
+.jarvis-fato__texto {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+
+.jarvis-fato__texto > span:first-child {
+	overflow-wrap: anywhere;
 }
 
 .jarvis-gatilho-novo {
@@ -1755,7 +2506,7 @@ body {
 .jarvis-gatilho-novo input[type='number'] {
 	width: 64px;
 	min-height: 44px;
-	padding: 0 8px;
+	padding: 0 var(--s-2);
 	border-radius: var(--r-md);
 	background: var(--surface-container-high);
 	color: var(--on-surface);
@@ -1770,17 +2521,32 @@ body {
    A hierarquia é intencional — criar é o comando; conversar é presença.
 */
 .fab--conversa {
-	width: 44px;
-	height: 44px;
+	/*
+	 * Mesmo grupo visual do criar: mesmo tamanho, mesmo raio, mesma elevação.
+	 *
+	 * Antes o chat tinha 44 px, sombra dupla e uma borda de 1 px sobre
+	 * `surface-container-high` — no aparelho isso lia como um halo em volta de
+	 * um botão menor que o vizinho. Dois botões do mesmo grupo têm de parecer
+	 * do mesmo grupo; o que muda é só a cor (superfície para o secundário, cor
+	 * cheia para o principal), nunca a forma.
+	 */
+	width: var(--s-12);
+	height: var(--s-12);
 	background: var(--surface-container-high);
 	color: var(--on-surface);
-	box-shadow:
-		0 2px 6px color-mix(in srgb, var(--on-surface) 12%, transparent),
-		0 1px 2px color-mix(in srgb, var(--on-surface) 8%, transparent);
+	/* Sem borda e sem sombra própria.
+	 *
+	 * A elevação vinha de `--elev-2`, que sobre um fundo quase preto e um botão
+	 * de superfície clara cria um anel difuso em volta — o "halo" que o dono
+	 * viu. Sobre superfície, a sombra não separa nada: o que separa é o tom do
+	 * próprio botão. O criar tem sombra porque é cor cheia.
+	 */
+	box-shadow: none;
 }
 
 .fab--conversa:active {
 	background: var(--surface-container-highest);
+	transform: scale(0.96);
 }
 
 /* ---------------------------------------------------- tela de conversa */
@@ -1819,12 +2585,18 @@ body {
 	background: var(--surface-container-highest);
 	color: var(--on-surface);
 	box-shadow: var(--elev-3);
-	border: 1px solid var(--outline-variant);
+	/* 1,42:1 contra a própria superfície: a única borda do aviso não delimitava
+	   nada. A mistura com a tinta secundária sobe para ~2,5:1. */
+	border: var(--hairline) solid
+		color-mix(in srgb, var(--outline-variant) 60%, var(--on-surface-variant));
 	touch-action: pan-y;
 	transition:
-		transform 160ms var(--ease),
-		opacity 160ms var(--ease);
-	animation: desce-aviso var(--dur-slow) var(--ease-spring);
+		transform var(--dur) var(--ease),
+		opacity var(--dur) var(--ease);
+	/* Mola de 320 ms num elemento fixo logo abaixo da barra de status dava
+	   overshoot visível encostando nela. 200 ms com a curva do app é o mesmo
+	   "chegou" sem o salto de volta. */
+	animation: desce-aviso var(--dur) var(--ease);
 }
 
 .aviso-topo__caixa--atencao {
@@ -1841,8 +2613,8 @@ body {
 
 .aviso-topo__caixa--saindo {
 	transition:
-		transform 180ms var(--ease),
-		opacity 180ms var(--ease);
+		transform var(--dur) var(--ease),
+		opacity var(--dur) var(--ease);
 }
 
 .aviso-topo__icone {
@@ -1867,10 +2639,13 @@ body {
 	display: block;
 	width: 36px;
 	height: 3px;
-	margin: 6px auto 0;
-	border-radius: 2px;
+	margin: var(--s-1-5) auto 0;
+	border-radius: var(--traco);
 	background: currentColor;
-	opacity: 0.18;
+	/* .18 dava 1,42:1 — o traço praticamente não existia. .35 dá 2,07:1: ainda
+	   discreto, mas visível como affordance de "arraste". Não é texto, então a
+	   regra é de percepção, não de AA. */
+	opacity: 0.35;
 }
 
 @keyframes desce-aviso {

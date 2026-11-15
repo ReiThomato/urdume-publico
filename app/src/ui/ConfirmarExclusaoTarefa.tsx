@@ -1,7 +1,7 @@
 import { Folha } from '@/ui/Folha'
 import { IconeApagar } from '@/ui/icones'
 
-export interface ConfirmarExclusaoTarefaProps {
+interface ConfirmarExclusaoTarefaProps {
 	/** Tarefa escolhida no atalho de lixeira; `null` mantém a folha fechada. */
 	tarefa: { id: string; title: string } | null
 	onFechar: () => void

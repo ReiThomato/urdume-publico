@@ -89,11 +89,10 @@ export async function lerRetrato(
 	const agora = opcoes.agora ?? Date.now()
 
 	try {
-		const [tasks, projects, pages, events, habits, habitLogs, reminders, ultimaAbertura, ultimoBackup, interrupcoes, fatos24h, cancelados24h] =
+		const [tasks, projects, events, habits, habitLogs, reminders, ultimaAbertura, ultimoBackup, interrupcoes, fatos24h, cancelados24h] =
 			await Promise.all([
 				database.tasks.toArray(),
 				database.projects.toArray(),
-				database.pages.toArray(),
 				database.events.toArray(),
 				database.habits.toArray(),
 				database.habitLogs.toArray(),
@@ -108,7 +107,6 @@ export async function lerRetrato(
 		return montarRetrato({
 			tasks,
 			projects,
-			pages,
 			events,
 			habits,
 			habitLogs,
@@ -139,6 +137,7 @@ export async function lerRetrato(
 				atrasoCritico: false,
 				subtarefasParadas: 0,
 				recorrentesFalhando: [],
+				deHoje: [],
 			},
 			projetos: [],
 			agenda: {
@@ -153,7 +152,6 @@ export async function lerRetrato(
 			},
 			habitos: [],
 			lembretes: { abertos: 0, vencidos: 0, lista: [] },
-			paginas: { total: 0, recentes: [] },
 			habitosDisponiveis: [],
 			uso: {
 				diasSemAbrir: 0,

@@ -21,7 +21,7 @@ import { IconeAviso, IconeFechar } from '@/ui/icones'
  * código inteiro cabe abaixo.
  */
 
-export type TipoDeAviso = 'info' | 'atencao' | 'erro'
+type TipoDeAviso = 'info' | 'atencao' | 'erro'
 
 export interface AvisoDoTopo {
 	/** Muda a cada aviso novo; é o que reinicia a animação. */

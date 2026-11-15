@@ -52,10 +52,6 @@ export function formatarHora(date: Date | number): string {
 	return formatadorHora.format(typeof date === 'number' ? new Date(date) : date)
 }
 
-export function ehMesmoDia(a: Date, b: Date): boolean {
-	return chaveDoDia(a) === chaveDoDia(b)
-}
-
 export interface CelulaMes {
 	chave: string
 	data: Date

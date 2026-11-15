@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/db'
-import type { Task } from '@/db/db'
+import type { Evento, Reminder, Task } from '@/db/db'
 import {
+	restaurarReminder,
 	restaurarTask,
+	softDeleteReminder,
 	softDeleteTask,
 	toggleReminder,
 	toggleTask,
@@ -11,6 +13,7 @@ import {
 	useProjects,
 	useReminders,
 } from '@/db/repo'
+import { restaurarEvento } from '@/db/eventos'
 import { useEventosDoDia } from '@/db/use-eventos'
 import { alternarDiaHabito, ehMensuravel, progressoDoDia, useHabitosCalculados } from '@/db/habitos'
 import {
@@ -18,7 +21,6 @@ import {
 	chaveDoDia,
 	diaDeHoje,
 	formatarDiaCurto,
-	formatarDiaLongo,
 	formatarMes,
 	formatarHora,
 } from '@/lib/date'
@@ -29,28 +31,33 @@ import { MarcaUrdume } from '@/ui/Marca'
 import { Busca } from '@/ui/Busca'
 import { EditorBlocos, TextoDoBloco } from '@/ui/EditorBlocos'
 import { EditarTarefa } from '@/ui/EditarTarefa'
-import { ConfirmarExclusaoTarefa } from '@/ui/ConfirmarExclusaoTarefa'
+import { EditarLembrete } from '@/ui/EditarLembrete'
+import { EditarEvento } from '@/ui/EditarEvento'
+import { DURACAO_DO_DESFAZER, ExcluirComDesfazer, FaixaDesfazer, useDesfazerExclusao } from '@/ui/ExcluirComDesfazer'
+import { Folha } from '@/ui/Folha'
 import { BlocoProgresso } from '@/ui/Progresso'
 import { PainelDoDia } from '@/ui/PainelDoDia'
-import { useResumoJarvis } from '@/lib/jarvis/resumo'
 import { TarefaItem } from '@/ui/TarefaItem'
 import { estiloCor } from '@/ui/cores'
+import { estaAtrasada, tipoDaTarefa } from '@/lib/tarefas'
 import {
 	IconeAdicionar,
 	IconeAjuste,
+	IconeApagar,
 	IconeBuscar,
 	IconeCalendario,
 	IconeConcluido,
 	IconeExpandir,
 	IconeFogo,
 	IconeHorario,
+	IconeMaisVertical,
 	IconePasta,
 	IconeRaio,
 } from '@/ui/icones'
-import { corDoIndice } from '@/ui/paleta'
+import { corDe } from '@/ui/paleta'
 import { escrever } from '@/lib/falhas'
 
-export interface InicioProps {
+interface InicioProps {
 	onCriar: (opcoes?: {
 		tipo?: 'tarefa' | 'projeto' | 'lembrete' | 'evento' | 'habito'
 		dia?: string
@@ -72,7 +79,7 @@ function useAtrasadas(hoje: string): Task[] | undefined {
 	return useLiveQuery(async () => {
 		const todas = await db.tasks.toArray()
 		return todas
-			.filter((t) => !t.deletedAt && !t.done && t.dueDate && t.dueDate < hoje)
+			.filter((t) => !t.deletedAt && estaAtrasada(t, hoje))
 			.sort((a, b) => (a.dueDate ?? '').localeCompare(b.dueDate ?? ''))
 	}, [hoje])
 }
@@ -80,14 +87,27 @@ function useAtrasadas(hoje: string): Task[] | undefined {
 export function Inicio({ onCriar }: InicioProps) {
 	const { navigate } = useRouter()
 	const [buscando, setBuscando] = useState(false)
-	const resumoJarvis = useResumoJarvis()
 	const [editandoBlocos, setEditandoBlocos] = useState(false)
 	const [editandoTarefa, setEditandoTarefa] = useState<Task | null>(null)
 	const [excluindoTarefa, setExcluindoTarefa] = useState<Task | null>(null)
-	const [desfazerExclusao, setDesfazerExclusao] = useState<{ id: string; title: string } | null>(null)
 	const [desfazer, setDesfazer] = useState<{ id: string; titulo: string } | null>(null)
 	const desfazerTimer = useRef<number | undefined>(undefined)
 	const [mostrarConcluidas, setMostrarConcluidas] = useState(false)
+
+	/**
+	 * Lembretes e eventos ganharam edição/exclusão aqui.
+	 *
+	 * Eram as duas únicas entidades que apareciam no Início sem nenhum toque
+	 * possível: o lembrete só nascia (D9) e o evento só se editava na Agenda
+	 * (D7). Agora o menu ⋮ do lembrete e o toque no evento abrem a mesma folha
+	 * que as outras telas usam.
+	 */
+	const [editandoLembrete, setEditandoLembrete] = useState<Reminder | null>(null)
+	/** Lembrete com o menu ⋮ aberto (mesmo padrão do cartão de hábito). */
+	const [acoesLembrete, setAcoesLembrete] = useState<Reminder | null>(null)
+	const [excluindoLembrete, setExcluindoLembrete] = useState<Reminder | null>(null)
+	const [editandoEvento, setEditandoEvento] = useState<Evento | null>(null)
+	const desfazerExclusao = useDesfazerExclusao()
 
 	const hoje = useMemo(() => diaDeHoje(), [])
 	const chaveHoje = chaveDoDia(hoje)
@@ -122,7 +142,7 @@ export function Inicio({ onCriar }: InicioProps) {
 		escrever(() => toggleTask(id, true))
 		setDesfazer({ id, titulo })
 		window.clearTimeout(desfazerTimer.current)
-		desfazerTimer.current = window.setTimeout(() => setDesfazer(null), 4000)
+		desfazerTimer.current = window.setTimeout(() => setDesfazer(null), DURACAO_DO_DESFAZER)
 	}
 
 	const cumprimento = (() => {
@@ -152,15 +172,20 @@ export function Inicio({ onCriar }: InicioProps) {
 	 *
 	 * `smooth` é uma animação de rolagem, não um salto: o usuário vê a fita
 	 * voltar, o que comunica "estou te trazendo de volta" em vez de parecer que
-	 * a tela recarregou.
+	 * a tela recarregou. Mas animação de rolagem NÃO é CSS: `scroll-behavior:
+	 * auto !important` (em `tokens.css`) não alcança `scrollTo({behavior})`. Com
+	 * movimento reduzido — do sistema ou do app — o salto tem de ser seco.
 	 */
-	const irParaHoje = (behavior: ScrollBehavior = 'smooth'): void => {
+	const irParaHoje = (behavior?: ScrollBehavior): void => {
 		const fita = fitaRef.current
 		if (!fita) return
+		const reduzido =
+			window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
+			document.documentElement.getAttribute('data-movimento') === 'reduzido'
 		const atual = fita.querySelector<HTMLElement>('.tira-dia--atual')
 		if (!atual) return
 		const alvo = atual.offsetLeft - fita.clientWidth / 2 + atual.offsetWidth / 2
-		fita.scrollTo({ left: Math.max(0, alvo), behavior })
+		fita.scrollTo({ left: Math.max(0, alvo), behavior: behavior ?? (reduzido ? 'auto' : 'smooth') })
 	}
 
 	/**
@@ -205,8 +230,52 @@ export function Inicio({ onCriar }: InicioProps) {
 		const def = definicao(bloco.tipo)
 		const titulo = bloco.titulo || def.tituloPadrao
 
-		// Resumo: o número que importa primeiro.
+		/*
+		 * Resumo: UM cartão, com o dia inteiro escrito nele.
+		 *
+		 * A primeira tentativa desta rodada empilhou cartões de "hábitos",
+		 * "atrasadas" e "agenda" embaixo do resumo. Era errado por três
+		 * motivos: repetia números que o cartão já dizia, repetia seções que
+		 * já existem abaixo na mesma tela, e não parecia o app. O pedido era
+		 * expandir o que o resumo CONTA, não criar outro resumo.
+		 *
+		 * Agora é o mesmo cartão de antes — número grande e duas linhas de
+		 * texto — com o repertório maior na segunda linha. Cada número
+		 * aparece uma vez só, e nenhum deles vira um bloco novo.
+		 */
 		if (bloco.tipo === 'resumo') {
+			const eventosHoje = eventos ?? []
+			const proximoEvento = [...eventosHoje]
+				.filter((evento) => !evento.diaInteiro)
+				.sort((a, b) => a.startAt - b.startAt)[0]
+			const lembretesHoje = (lembretes ?? []).filter(
+				(item) => !item.done && item.dueAt && chaveDoDia(new Date(item.dueAt)) === chaveHoje,
+			)
+			const atrasadasHoje = atrasadas?.length ?? 0
+
+			/*
+			 * A segunda linha é uma frase, não uma grade.
+			 *
+			 * Só entra o que existe hoje, e na ordem em que se decide o dia:
+			 * atraso primeiro, depois hábito (o compromisso consigo), depois o
+			 * compromisso com hora e o lembrete que vence. Tudo que não existe
+			 * não ocupa espaço.
+			 */
+			const fatos = [
+				atrasadasHoje > 0
+					? `${atrasadasHoje} ${atrasadasHoje === 1 ? 'atrasada' : 'atrasadas'}`
+					: null,
+				habitosHoje.length > 0 ? `hábitos ${habitosFeitos}/${habitosHoje.length}` : null,
+				proximoEvento
+					? `${eventosHoje.length} na agenda, ${formatarHora(proximoEvento.startAt)} o primeiro`
+					: eventosHoje.length > 0
+						? `${eventosHoje.length} na agenda`
+						: null,
+				lembretesHoje.length > 0
+					? `${lembretesHoje.length} ${lembretesHoje.length === 1 ? 'lembrete' : 'lembretes'}`
+					: null,
+			].filter(Boolean) as string[]
+
 			return (
 				<section key={bloco.id} className="secao" aria-label={titulo}>
 					<div className="resumo-hoje">
@@ -223,8 +292,7 @@ export function Inicio({ onCriar }: InicioProps) {
 							</span>
 							<span style={{ opacity: 0.85 }}>
 								{cumprimento}
-								{atrasadas && atrasadas.length > 0 ? ` · ${atrasadas.length} atrasada(s)` : ''}
-								{habitosHoje.length > 0 ? ` · hábitos ${habitosFeitos}/${habitosHoje.length}` : ''}
+								{fatos.length > 0 ? ` · ${fatos.join(' · ')}` : ''}
 							</span>
 						</span>
 					</div>
@@ -292,7 +360,7 @@ export function Inicio({ onCriar }: InicioProps) {
 											tarefa={tarefa}
 											lista={
 												projeto
-													? { id: projeto.id, nome: projeto.name, cor: Number(projeto.color ?? 0) }
+													? { id: projeto.id, nome: projeto.name, cor: projeto.color }
 													: undefined
 											}
 											onConcluir={concluir}
@@ -364,7 +432,7 @@ export function Inicio({ onCriar }: InicioProps) {
 											atrasada
 											lista={
 												projeto
-													? { id: projeto.id, nome: projeto.name, cor: Number(projeto.color ?? 0) }
+													? { id: projeto.id, nome: projeto.name, cor: projeto.color }
 													: undefined
 											}
 											onConcluir={concluir}
@@ -442,11 +510,11 @@ export function Inicio({ onCriar }: InicioProps) {
 													borderRadius: 999,
 													flexShrink: 0,
 													background: habito.concluidoHoje
-														? corDoIndice(habito.cor ?? 0).hex
-														: `${corDoIndice(habito.cor ?? 0).hex}33`,
+														? corDe(habito.cor).hex
+														: `${corDe(habito.cor).hex}33`,
 													color: habito.concluidoHoje
 														? 'var(--on-primary)'
-														: corDoIndice(habito.cor ?? 0).hex,
+														: corDe(habito.cor).hex,
 												}}
 												aria-hidden="true"
 											>
@@ -514,26 +582,34 @@ export function Inicio({ onCriar }: InicioProps) {
 					) : (
 						<ul className="linha-grupo">
 							{doDia.map((evento) => (
-								<li key={evento.id} className="linha" style={estiloCor(evento.cor)}>
-									<span
-										className="linha__icone"
-										style={{
-											background: `${corDoIndice(evento.cor).hex}33`,
-											color: corDoIndice(evento.cor).hex,
-										}}
-										aria-hidden="true"
+								<li key={evento.id}>
+									<button
+										type="button"
+										className="linha"
+										style={estiloCor(evento.cor)}
+										onClick={() => setEditandoEvento(evento)}
+										aria-label={`Editar ${evento.title}`}
 									>
-										<IconeHorario size={20} />
-									</span>
-									<span className="linha__corpo">
-										<span className="linha__titulo">{evento.title}</span>
-										<span className="linha__meta">
-											{evento.diaInteiro
-												? 'Dia inteiro'
-												: `${formatarHora(evento.startAt)} – ${formatarHora(evento.endAt)}`}
-											{evento.local ? ` · ${evento.local}` : ''}
+										<span
+											className="linha__icone"
+											style={{
+												background: `${corDe(evento.cor).hex}33`,
+												color: corDe(evento.cor).hex,
+											}}
+											aria-hidden="true"
+										>
+											<IconeHorario size={20} />
 										</span>
-									</span>
+										<span className="linha__corpo">
+											<span className="linha__titulo">{evento.title}</span>
+											<span className="linha__meta">
+												{evento.diaInteiro
+													? 'Dia inteiro'
+													: `${formatarHora(evento.startAt)} – ${formatarHora(evento.endAt)}`}
+												{evento.local ? ` · ${evento.local}` : ''}
+											</span>
+										</span>
+									</button>
 								</li>
 							))}
 						</ul>
@@ -568,7 +644,7 @@ export function Inicio({ onCriar }: InicioProps) {
 					) : (
 						<ul className="linha-grupo">
 							{ativos.map((projeto) => {
-								const cor = corDoIndice(Number(projeto.color ?? 0))
+								const cor = corDe(projeto.color, projeto.id)
 								return (
 									<li key={projeto.id}>
 										<Link route={{ name: 'projeto', id: projeto.id }} className="linha">
@@ -620,7 +696,12 @@ export function Inicio({ onCriar }: InicioProps) {
 						</div>
 					) : (
 						<ul className="linha-grupo">
-							{pendentes.map((lembrete) => (
+							{pendentes.map((lembrete) => {
+								// Vencido = horário já passou e ainda não resolvido. A faixa
+								// interna de avisos cobre o disparo; aqui é o destaque visual.
+								const vencido = lembrete.dueAt != null && lembrete.dueAt <= Date.now()
+
+								return (
 								<li key={lembrete.id} className="linha">
 									<button
 										type="button"
@@ -628,20 +709,43 @@ export function Inicio({ onCriar }: InicioProps) {
 										aria-checked={false}
 										aria-label={`Resolver ${lembrete.text}`}
 										className="checkbox"
-										onClick={() => void toggleReminder(lembrete.id, true)}
+										onClick={() => escrever(() => toggleReminder(lembrete.id, true))}
 									>
 										<span className="checkbox__marca" aria-hidden="true">
 											<IconeConcluido size={16} />
 										</span>
 									</button>
-									<span className="linha__corpo">
+									<button
+										type="button"
+										className="linha__corpo"
+										onClick={() => setEditandoLembrete(lembrete)}
+										style={{ textAlign: 'left' }}
+										aria-label={`Editar ${lembrete.text}`}
+									>
 										<span className="linha__titulo">{lembrete.text}</span>
 										<span className="linha__meta">
-											{lembrete.dueAt ? formatarHora(lembrete.dueAt) : 'Sem hora'}
+											{lembrete.dueAt
+												? vencido
+													? `Venceu às ${formatarHora(lembrete.dueAt)}`
+													: formatarHora(lembrete.dueAt)
+												: 'Sem hora'}
 										</span>
-									</span>
+									</button>
+									{vencido ? <span className="etiqueta etiqueta--atraso">Vencido</span> : null}
+									{/* Mesmo menu ⋮ dos hábitos: abre uma folha de ações com
+									    editar e excluir, em vez de pular direto ao editor. */}
+									<button
+										type="button"
+										className="botao-icone botao-icone--pequeno"
+										aria-label={`Ações de ${lembrete.text}`}
+										title="Editar ou excluir"
+										onClick={() => setAcoesLembrete(lembrete)}
+									>
+										<IconeMaisVertical size={18} />
+									</button>
 								</li>
-							))}
+								)
+							})}
 						</ul>
 					)}
 				</section>
@@ -693,35 +797,31 @@ export function Inicio({ onCriar }: InicioProps) {
 
 	return (
 		<div className="tela">
-			{/* Topo do Início: marca e ações na MESMA linha, sem o título "Hoje".
-			    A data fica logo abaixo da marca, em corpo pequeno. Antes havia
-			    marca, depois "Hoje" em 30 px e a data em três linhas de altura —
-			    quase 1/6 da tela só para dizer o dia. */}
+			{/*
+			 * Topo do Início: só a marca e as ações, na mesma linha.
+			 *
+			 * A data saiu daqui. Ela aparecia DUAS vezes: em corpo pequeno sob a
+			 * marca e de novo no mês logo abaixo ("Sexta-feira, 13 de novembro"
+			 * e "Novembro de 2026"), e ainda empurrava a marca para baixo,
+			 * deixando-a mais baixa que os botões ao lado. A data por extenso
+			 * continua na Agenda, onde é informação, não decoração.
+			 */}
 			<header className="topo topo--inicio">
 				<div className="topo__linha topo__linha--marca">
 					<div className="topo__marca-bloco">
 						<MarcaUrdume />
-						<p className="topo__data">{capitalizar(formatarDiaLongo(hoje))}</p>
 					</div>
 					<div className="topo__acoes">
-						{/* Atalho do Jarvis: mostra a contagem só quando há algo para
-						    ver. Ícone sozinho gastaria o mesmo espaço para dizer "nada". */}
+						{/* Atalho do Jarvis: só o ícone. O número de observações saía
+						    aqui e virava cobrança na tela inicial; ele passou para
+						    dentro das configurações de IA, junto do painel. */}
 						<Link
 							route={{ name: 'jarvis' }}
 							className="botao-icone jarvis-atalho"
-							ariaLabel={
-								resumoJarvis && resumoJarvis.total > 0
-									? `Jarvis: ${resumoJarvis.total} itens pedem atenção`
-									: 'Jarvis'
-							}
+							ariaLabel="Jarvis"
 							title="Jarvis"
 						>
 							<IconeRaio size={22} />
-							{resumoJarvis && resumoJarvis.total > 0 ? (
-								<span className="jarvis-atalho__contagem" aria-hidden="true">
-									{resumoJarvis.total}
-								</span>
-							) : null}
 						</Link>
 						<button
 							type="button"
@@ -746,20 +846,18 @@ export function Inicio({ onCriar }: InicioProps) {
 			<Busca aberta={buscando} onFechar={() => setBuscando(false)} />
 
 			{desfazer ? (
-				<div className="desfazer" role="status" aria-live="polite">
-					<span className="desfazer__texto">Concluída: {desfazer.titulo}</span>
-					<button
-						type="button"
-						className="botao botao--texto"
-						onClick={() => {
-							escrever(() => toggleTask(desfazer.id, false))
-							setDesfazer(null)
-							window.clearTimeout(desfazerTimer.current)
-						}}
-					>
-						Desfazer
-					</button>
-				</div>
+				<FaixaDesfazer
+					texto={`Concluída: ${desfazer.titulo}`}
+					onDesfazer={() => {
+						escrever(() => toggleTask(desfazer.id, false))
+						setDesfazer(null)
+						window.clearTimeout(desfazerTimer.current)
+					}}
+					onFechar={() => {
+						setDesfazer(null)
+						window.clearTimeout(desfazerTimer.current)
+					}}
+				/>
 			) : null}
 
 			<div className="conteudo" style={{ paddingTop: 0 }}>
@@ -840,6 +938,10 @@ export function Inicio({ onCriar }: InicioProps) {
 						hoje={chaveHoje}
 						onEditarTarefa={setEditandoTarefa}
 						onCriar={(dia) => onCriar({ tipo: 'tarefa', dia })}
+						onAbrirEvento={setEditandoEvento}
+						onAbrirLembrete={setEditandoLembrete}
+						onConcluirTarefa={concluir}
+						onExcluirTarefa={setExcluindoTarefa}
 					/>
 				) : null}
 
@@ -894,37 +996,118 @@ export function Inicio({ onCriar }: InicioProps) {
 				etiquetasConhecidas={etiquetasConhecidas}
 			/>
 
-			{/* Excluir a partir do Início. A folha de confirmação é a mesma das
-			    outras telas; a diferença é o desfazer de 4 s, porque o toque no
-			    ícone de lixeira é fácil de errar no celular. */}
-			<ConfirmarExclusaoTarefa
-				tarefa={excluindoTarefa}
+			{/* Excluir a partir do Início. A confirmação e o desfazer vêm do
+			    componente único das outras telas — antes este arquivo tinha a
+			    própria cópia do desfazer de 4 s e as outras telas não tinham. */}
+			<ExcluirComDesfazer
+				alvo={excluindoTarefa ? { id: excluindoTarefa.id, titulo: excluindoTarefa.title } : null}
+				titulo="Excluir tarefa"
+				descricao={(alvo) => (
+					<>
+						Excluir <strong>{alvo.titulo}</strong>? Ela sai de todas as visões deste aparelho.
+					</>
+				)}
 				onFechar={() => setExcluindoTarefa(null)}
-				onExcluir={async (alvo) => {
-					await softDeleteTask(alvo.id)
-					setExcluindoTarefa(null)
-					window.clearTimeout(desfazerTimer.current)
-					setDesfazer(null)
-					setDesfazerExclusao(alvo)
-					desfazerTimer.current = window.setTimeout(() => setDesfazerExclusao(null), 4000)
+				onExcluir={(alvo) => softDeleteTask(alvo.id)}
+				onDesfazer={(alvo) => restaurarTask(alvo.id)}
+			/>
+
+			<EditarLembrete
+				lembrete={editandoLembrete}
+				onFechar={() => setEditandoLembrete(null)}
+				onExcluir={(lembrete) => {
+					setEditandoLembrete(null)
+					setExcluindoLembrete(lembrete)
 				}}
 			/>
 
-			{desfazerExclusao ? (
-				<div className="desfazer" role="status" aria-live="polite">
-					<span className="desfazer__texto">Excluída: {desfazerExclusao.title}</span>
+			{/* Ações do lembrete: o mesmo menu do cartão de hábito. Sem isto,
+			    editar dependia de acertar o texto e excluir não existia em tela
+			    nenhuma (D9) — o lembrete criado com a hora errada era permanente. */}
+			<Folha
+				titulo={acoesLembrete?.text ?? 'Lembrete'}
+				sobre="O que você quer fazer com ele"
+				aberta={acoesLembrete !== null}
+				onFechar={() => setAcoesLembrete(null)}
+			>
+				<div className="opcoes-criacao">
 					<button
 						type="button"
-						className="botao botao--texto"
+						className="opcao-criacao"
 						onClick={() => {
-							escrever(() => restaurarTask(desfazerExclusao.id))
-							setDesfazerExclusao(null)
-							window.clearTimeout(desfazerTimer.current)
+							const alvo = acoesLembrete
+							setAcoesLembrete(null)
+							if (alvo) setEditandoLembrete(alvo)
 						}}
 					>
-						Desfazer
+						<span className="opcao-criacao__icone" aria-hidden="true">
+							<IconeHorario size={22} />
+						</span>
+						<span className="opcao-criacao__texto">
+							<span className="opcao-criacao__titulo">Editar lembrete</span>
+							<span className="opcao-criacao__descricao">Texto e hora do aviso</span>
+						</span>
+					</button>
+
+					<button
+						type="button"
+						className="opcao-criacao"
+						onClick={() => {
+							const alvo = acoesLembrete
+							setAcoesLembrete(null)
+							if (alvo) setExcluindoLembrete(alvo)
+						}}
+					>
+						<span
+							className="opcao-criacao__icone"
+							aria-hidden="true"
+							style={{ color: 'var(--error)' }}
+						>
+							<IconeApagar size={22} />
+						</span>
+						<span className="opcao-criacao__texto">
+							<span className="opcao-criacao__titulo" style={{ color: 'var(--error)' }}>
+								Excluir lembrete
+							</span>
+							<span className="opcao-criacao__descricao">
+								O aviso deixa de aparecer. Dá para desfazer.
+							</span>
+						</span>
 					</button>
 				</div>
+			</Folha>
+
+			<ExcluirComDesfazer
+				alvo={excluindoLembrete ? { id: excluindoLembrete.id, titulo: excluindoLembrete.text } : null}
+				titulo="Excluir lembrete"
+				descricao={(alvo) => (
+					<>
+						Excluir <strong>{alvo.titulo}</strong>? O aviso dele deixa de aparecer.
+					</>
+				)}
+				textoDoDesfazer={(alvo) => `Excluído: ${alvo.titulo}`}
+				onFechar={() => setExcluindoLembrete(null)}
+				onExcluir={(alvo) => softDeleteReminder(alvo.id)}
+				onDesfazer={(alvo) => restaurarReminder(alvo.id)}
+			/>
+
+			<EditarEvento
+				evento={editandoEvento}
+				onFechar={() => setEditandoEvento(null)}
+				onExcluido={(evento) =>
+					desfazerExclusao.anunciar({
+						texto: `Excluído: ${evento.title}`,
+						restaurar: () => escrever(() => restaurarEvento(evento.id.split('@')[0]!)),
+					})
+				}
+			/>
+
+			{desfazerExclusao.pendente ? (
+				<FaixaDesfazer
+					texto={desfazerExclusao.pendente.texto}
+					onDesfazer={desfazerExclusao.desfazer}
+					onFechar={desfazerExclusao.fechar}
+				/>
 			) : null}
 		</div>
 	)
@@ -943,7 +1126,11 @@ function BlocoAlgumDia({
 }) {
 	const tarefas = useLiveQuery(async () => {
 		const todas = await db.tasks.toArray()
-		return todas.filter((t) => !t.deletedAt && !t.done && t.someday).slice(0, 8)
+		// "Algum dia" é o tipo `ideia` para registros novos; `someday` continua
+		// valendo para os antigos, que nunca passaram pelo campo novo.
+		return todas
+			.filter((t) => !t.deletedAt && !t.done && (tipoDaTarefa(t) === 'ideia' || t.someday))
+			.slice(0, 8)
 	}, [])
 
 	return (

@@ -1,5 +1,5 @@
 /* ---------------------------------------------------------------------------
-   Nexo — tokens do sistema visual.
+   Urdume — tokens do sistema visual.
 
    A paleta NÃO é escrita à mão: `src/app/tema.ts` gera as variáveis
    `--primary`, `--surface-container*`, `--outline` etc. a partir de uma
@@ -156,7 +156,6 @@ html.tema-trocando * {
 	/* --- forma: Material 3 Expressive, mais arredondado que o padrão.
 	   Ajustado para baixo na revisão de densidade: raio de 28 num cartão de
 	   390 px de largura comia a borda e fazia o bloco parecer maior do que é. --- */
-	--r-xs: 4px;
 	--r-sm: 6px;
 	--r-md: 10px;
 	--r-lg: 14px;
@@ -165,19 +164,54 @@ html.tema-trocando * {
 	--r-3xl: 28px;
 	--r-pill: 999px;
 
-	/* --- tipografia --- */
+	/* --- tipografia ---
+	   Escala única, do maior para o menor. `--text-base` é o corpo mínimo dos
+	   campos (16 px é o piso em que o WebView do Android para de dar zoom ao
+	   focar); `--text-md` é o degrau de "título dentro de bloco" e acompanha
+	   `--text-lg` para não criar um segundo valor com o mesmo papel. */
 	--font: 'Figtree', system-ui, -apple-system, Roboto, sans-serif;
-	--font-num: 'Figtree', ui-monospace, 'SF Mono', Menlo, monospace;
 
 	--text-display: 30px;
 	--text-headline: 24px;
 	--text-title: 19px;
 	--text-lg: 17px;
+	--text-md: var(--text-lg);
+	--text-base: 16px;
 	--text-body: 15.5px;
 	--text-sm: 13.5px;
 	--text-xs: 11.5px;
 
-	--w-light: 300;
+	/* --- alvos de toque ---
+	   O mínimo da WCAG 2.5.5 é 44×44 CSS px. `--toque` é o alvo REAL (pode
+	   incluir uma área invisível de `::after`); `--toque-desenho` é o tamanho
+	   visível do botão de ícone pequeno, que não precisa inchar só para caber
+	   no dedo. Separação mínima entre vizinhos destrutivos: `--s-2` (8 px). */
+	--toque: 44px;
+	--toque-desenho: 36px;
+	--toque-grande: 56px;
+
+	/* --- traços ---
+	   Medidas de 1 a 6 px que apareciam soltas em 100+ lugares. Borda é
+	   `--hairline`; filete/borda de foco é `--traco`; marcador de lista é
+	   `--ponto`; o vão de ícone+rótulo é `--s-1-5`. */
+	--hairline: 1px;
+	--traco: 2px;
+	--ponto: 5px;
+	--s-0-5: 2px;
+	--s-1-5: 6px;
+
+	/* --- altura de linha de lista ---
+	   Um padrão só: 60 px para linha de lista navegável. Linhas compactas
+	   dentro de um grupo (marco, subtarefa) ficam em 44 e são declaradas. */
+	--linha-h: 60px;
+
+	/* --- tinta sobre a cor de categoria ---
+	   As 12 cores da paleta de categorias são as mesmas no claro e no escuro.
+	   Texto/ícone sobre elas NÃO pode usar `--on-primary` (que depende da
+	   semente): sobre âmbar, branco dá 2,27:1. Esta tinta escura dá de 4,07 a
+	   9,23:1 em todas as 12. */
+	--tinta-sobre-cor: #1a1614;
+
 	--w-regular: 400;
 	--w-medium: 500;
 	--w-semibold: 600;
@@ -210,22 +244,62 @@ html.tema-trocando * {
 
 	/* --- layout ---
 	   Barra e topo mais baixos: eram 80 + 64 px de moldura fixa num celular de
-	   780 px, quase um quinto da tela só de casca. */
+	   780 px, quase um quinto da tela só de casca.
+
+	   `--app-bar-h` saiu: declarava 56 px e nunca era usada, enquanto o
+	   cabeçalho real mede 51 px sem subtítulo e 73 px com ele (padding 12+8,
+	   título de 30 px com line-height 1.02, subtítulo de 13,5 e 2 px de vão).
+	   A altura vem do conteúdo, e é o conteúdo que deve mandar. */
 	--nav-h: 64px;
 	--rail-w: 88px;
 	--content-max: 720px;
-	--app-bar-h: 56px;
 
-	/* Cor de destaque secundária usada nos gráficos: sai do terciário. */
-	--grafico-1: var(--primary);
-	--grafico-2: var(--tertiary);
-	--grafico-3: var(--secondary);
+	/* Altura da pilha de botões flutuantes: conversar (44) + vão (12) + criar
+	   (48). É a conta que o `.desfazer` precisa para parar de cobrir o botão
+	   de conversar. Fica em token para a conta existir em um lugar só. */
+	--fab-pilha: 104px;
+
+	/* --- cor de TEXTO e de ícone que representa o acento -----------------------
+	   `--primary` é o preenchimento da marca: `on-primary` por cima dele dá
+	   6,19:1 (claro) e 10,37:1 (escuro). Mas o MESMO `--primary` usado como
+	   cor de letra sobre a superfície dava 3,15:1 no fundo e 2,63:1 no
+	   `surface-container-high` — reprovado em 9 de 9 sementes no tema claro.
+
+	   `--on-accent` é a mesma matiz, um degrau na direção da tinta do tema:
+	   `color-mix(primary 50%, on-surface)`. Medido nas 9 sementes, o pior caso
+	   é 4,94:1 no claro (sobre `surface-container-highest`) e 4,59:1 no escuro
+	   (sobre `primary-container`). A marca não muda de matiz — só de tom.
+
+	   `--primary` continua sendo usado como FUNDO de botão, ponto, filete e
+	   barra. Trocar as duas coisas é o que apagava a identidade. */
+	--on-accent: #573326; /* sólido: WebView sem color-mix (ver @supports) */
+	--text-suave: #5f5754; /* sólido: idem */
+
+	/* Separador entre itens de lista. Havia 6 técnicas e 6 opacidades para a
+	   mesma linha de 1 px; agora todas apontam para este tom. */
+	--divisor: var(--outline-variant);
+}
+
+/* Cor de texto derivada do acento e da tinta do tema.
+
+   `color-mix()` exige Chrome 111+: com `minSdk 24` e WebView antigo ele é
+   descartado silenciosamente e a cor cai para o valor inicial (herdado). Por
+   isso as duas variáveis acima têm valor SÓLIDO de segurança, e a versão
+   calculada só entra quando o motor entende a função. Assim o app nunca fica
+   sem cor legível, em nenhuma versão de WebView. */
+@supports (color: color-mix(in srgb, red 50%, blue)) {
+	:root {
+		--on-accent: color-mix(in srgb, var(--primary) 50%, var(--on-surface));
+		--text-suave: color-mix(in srgb, var(--on-surface-variant) 90%, var(--background));
+	}
 }
 
 /* O tema escuro vem inteiro do JS (mesma semente, esquema escuro). Este bloco
    só cobre o primeiro quadro, antes do IndexedDB responder. */
 @media (prefers-color-scheme: dark) {
 	:root:not([data-tema]) {
+		--on-accent: #ffc6b6;
+		--text-suave: #c7b6b1;
 		--background: #191210;
 		--on-background: #f0e0dc;
 		--surface: #191210;
@@ -278,7 +352,7 @@ html {
 
 body {
 	margin: 0;
-	min-height: 100dvh;
+	min-height: var(--altura-visivel, 100dvh);
 	background: var(--background);
 	color: var(--on-surface);
 	font-family: var(--font);
@@ -374,7 +448,7 @@ svg {
 	left: 12px;
 	top: -80px;
 	z-index: 200;
-	padding: 12px 20px;
+	padding: var(--s-3) var(--s-5);
 	border-radius: var(--r-pill);
 	background: var(--primary);
 	color: var(--on-primary);
@@ -439,6 +513,11 @@ svg {
 	--surface-container: #f4f4f4;
 	--surface-container-high: #ececec;
 	--surface-container-highest: #e2e2e2;
+	/* Sobre branco puro a tinta já é forte: o acento não pode clarear a marca,
+	   precisa continuar legível. `--tinta-sobre-cor` acompanha o texto. */
+	--on-accent: #5c2b18;
+	--text-suave: #333333;
+	--tinta-sobre-cor: #000000;
 }
 
 :root[data-contraste='alto'][data-tema='dark'] {
@@ -453,6 +532,9 @@ svg {
 	--surface-container: #1a1a1a;
 	--surface-container-high: #262626;
 	--surface-container-highest: #333333;
+	--on-accent: #ffd5c7;
+	--text-suave: #dedede;
+	--tinta-sobre-cor: #000000;
 }
 
 /* Prioridade no escuro.
@@ -484,6 +566,40 @@ svg {
 }
 
 /* ---------------------------------------------------------------------------
+   Preto puro (AMOLED)
+
+   O JS já troca os tokens das superfícies por preto e degraus de cinza. Mas
+   sombra sobre preto puro é invisível (a camada não se separa) e o contorno
+   padrão ficava a 1,4:1 — os cartões perdiam a borda justamente no modo que
+   promete a melhor tela.
+
+   Aqui a hierarquia passa a vir de CONTORNO, não de sombra: onde havia
+   elevação entra um filete de 1 px na cor de contorno do tema, e a sombra
+   some (ela não desenharia nada).
+   --------------------------------------------------------------------------- */
+
+:root[data-amoled='sim'] {
+	--elev-1: none;
+	--elev-2: none;
+	--elev-3: none;
+}
+
+:root[data-amoled='sim'] .cartao,
+:root[data-amoled='sim'] .linha-grupo,
+:root[data-amoled='sim'] .painel-projeto,
+:root[data-amoled='sim'] .habito,
+:root[data-amoled='sim'] .resumo-lista {
+	border: var(--hairline) solid var(--outline-variant);
+}
+
+/* Folhas e diálogos: o fundo do app é preto, então a folha precisa de um
+   degrau de cinza E de um contorno para não virar um buraco. */
+:root[data-amoled='sim'] .folha,
+:root[data-amoled='sim'] .seletor-cor__mostra {
+	box-shadow: inset 0 0 0 1px var(--outline-variant);
+}
+
+/* ---------------------------------------------------------------------------
    Interruptor (switch) — Material 3 Expressive
    --------------------------------------------------------------------------- */
 
@@ -493,11 +609,12 @@ svg {
 	height: 32px;
 	border-radius: var(--r-pill);
 	background: var(--surface-container-highest);
-	border: 2px solid var(--outline);
+	border: var(--traco) solid var(--outline);
 	flex-shrink: 0;
 	transition:
 		background var(--dur) var(--ease),
-		border-color var(--dur) var(--ease);
+		border-color var(--dur) var(--ease),
+		transform var(--dur-fast) var(--ease);
 }
 
 /* O alvo de toque é maior que o desenho: 48 px de área, sem engordar a pílula.
@@ -523,12 +640,21 @@ svg {
 	border-radius: 50%;
 	background: var(--outline);
 	transform: translateY(-50%);
+	/* 320 ms com mola num switch de 52×32 parecia "pesado": a bolinha crescia e
+	   viajava depois que o dedo já tinha saído. 200 ms com a curva do app dá a
+	   mesma leitura de "ligou" sem o atraso. */
 	transition:
-		transform var(--dur-slow) var(--ease-spring),
+		transform var(--dur) var(--ease),
 		width var(--dur) var(--ease),
 		height var(--dur) var(--ease),
 		background var(--dur) var(--ease),
 		left var(--dur) var(--ease);
+}
+
+/* O switch não tinha retorno de toque: ele só respondia depois que o estado
+   mudava. O encolhimento de 4% confirma o toque na hora. */
+.interruptor:active {
+	transform: scale(0.96);
 }
 
 .interruptor[aria-checked='true'] .interruptor__bolinha {

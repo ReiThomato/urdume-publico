@@ -1,23 +1,24 @@
 import { useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/db'
-import type { Task } from '@/db/db'
+import type { Project, Task } from '@/db/db'
 import {
-	createProject,
-	softDeleteProject,
+	restaurarTask,
 	softDeleteTask,
 	softDeleteTasks,
+	restaurarTasks,
 	toggleTask,
-	updateProject,
 } from '@/db/repo'
 import { useProjects } from '@/db/repo'
 import { chaveDoDia, diaDeHoje } from '@/lib/date'
 import { TarefaItem } from '@/ui/TarefaItem'
 import { EditarTarefa } from '@/ui/EditarTarefa'
+import { EditarProjeto } from '@/ui/EditarProjeto'
+import { CriarProjeto } from '@/ui/CriarProjeto'
 import { Folha } from '@/ui/Folha'
 import { useEscrita } from '@/lib/escrita'
-import { ConfirmarExclusaoTarefa } from '@/ui/ConfirmarExclusaoTarefa'
-import { PALETA, corDoIndice } from '@/ui/paleta'
+import { DURACAO_DO_DESFAZER, ExcluirComDesfazer, FaixaDesfazer, useDesfazerExclusao } from '@/ui/ExcluirComDesfazer'
+import { corDe } from '@/ui/paleta'
 import {
 	IconeAdicionar,
 	IconeApagar,
@@ -30,6 +31,7 @@ import { Topo } from '@/ui/AppShell'
 import { BarraDeOrdem, FILTRO_VAZIO, filtrar, ordenar } from '@/ui/ordem'
 import type { Filtro, Ordem } from '@/ui/ordem'
 import { escrever } from '@/lib/falhas'
+import { estaAtrasada } from '@/lib/tarefas'
 
 /**
  * Tarefas — a tela que funciona como o Grit: listas (categorias) em chips no
@@ -43,7 +45,7 @@ import { escrever } from '@/lib/falhas'
 interface Grupo {
 	key: string
 	nome: string
-	cor: number
+	cor: number | string | null
 	tarefas: Task[]
 	abertas: number
 }
@@ -69,10 +71,6 @@ export function Tarefas({
 	const [ordem, setOrdem] = useState<Ordem>('manual')
 	const [filtro, setFiltro] = useState<Filtro>(FILTRO_VAZIO)
 	const [criandoLista, setCriandoLista] = useState(false)
-	const [nomeLista, setNomeLista] = useState('')
-	const [erroLista, setErroLista] = useState<string | null>(null)
-	const [corLista, setCorLista] = useState(0)
-	const [iconeLista] = useState<string>('pasta')
 	const [editandoLista, setEditandoLista] = useState<string | null>(null)
 	const [confirmandoLimpar, setConfirmandoLimpar] = useState(false)
 	const [excluindoTarefa, setExcluindoTarefa] = useState<Task | null>(null)
@@ -80,6 +78,8 @@ export function Tarefas({
 	// Escritas com aviso de erro: a tela não fecha como se tivesse salvo quando
 	// o banco recusa (cota cheia, transação abortada).
 	const { executar, erro: erroEscrita } = useEscrita()
+	// "Limpar concluídas" também tem desfazer: o dado já era exclusão suave.
+	const desfazerLimpeza = useDesfazerExclusao()
 	const desfazerTimer = useRef<number | undefined>(undefined)
 
 	const hoje = chaveDoDia(diaDeHoje())
@@ -100,7 +100,7 @@ export function Tarefas({
 			lista.push({
 				key: projeto.id,
 				nome: projeto.name,
-				cor: Number(projeto.color ?? 0),
+				cor: projeto.color ?? null,
 				tarefas: doProjeto,
 				abertas: doProjeto.filter((t) => !t.done).length,
 			})
@@ -123,6 +123,36 @@ export function Tarefas({
 		return ordenar(base, ordem)
 	}, [grupo, filtro, ordem, hoje])
 
+	/*
+	 * Três faixas, sutis.
+	 *
+	 * Antes a lista aberta era uma pilha só: atrasada, hoje e "semana que vem"
+	 * ficavam na mesma altura, e o único sinal era a data em corpo pequeno.
+	 * Agrupar custa três cabeçalhos de 20 px — não é uma seção por grupo, é um
+	 * rótulo discreto — e responde à pergunta que se faz ao abrir a tela: o
+	 * que ficou para trás, o que é de hoje, o que ainda pode esperar.
+	 */
+	const faixas = useMemo(() => {
+		const atrasadas: Task[] = []
+		const deHoje: Task[] = []
+		const adiante: Task[] = []
+		const semDia: Task[] = []
+
+		for (const tarefa of abertas) {
+			if (estaAtrasada(tarefa, hoje)) atrasadas.push(tarefa)
+			else if (tarefa.dueDate === hoje) deHoje.push(tarefa)
+			else if (tarefa.dueDate) adiante.push(tarefa)
+			else semDia.push(tarefa)
+		}
+
+		return [
+			{ chave: 'atrasadas' as const, titulo: 'Atrasadas', itens: atrasadas },
+			{ chave: 'hoje' as const, titulo: 'Hoje', itens: deHoje },
+			{ chave: 'adiante' as const, titulo: 'Adiante', itens: adiante },
+			{ chave: 'sem-dia' as const, titulo: 'Sem dia', itens: semDia },
+		].filter((faixa) => faixa.itens.length > 0)
+	}, [abertas, hoje])
+
 	const escondidas = grupo.tarefas.filter((t) => !t.done).length - abertas.length
 
 	const concluidas = useMemo(
@@ -130,33 +160,19 @@ export function Tarefas({
 		[grupo],
 	)
 
-	const atrasadas = abertas.filter((t) => t.dueDate && t.dueDate < hoje).length
+	const atrasadas = abertas.filter((t) => estaAtrasada(t, hoje)).length
 
 	function concluir(id: string, titulo: string): void {
 		escrever(() => toggleTask(id, true))
 		setDesfazer({ id, titulo })
 		window.clearTimeout(desfazerTimer.current)
-		desfazerTimer.current = window.setTimeout(() => setDesfazer(null), 4000)
-	}
-
-	async function salvarLista(): Promise<void> {
-		const nome = nomeLista.trim()
-		if (!nome) return
-		const existente = (projetos ?? []).find((p) => p.name.toLowerCase() === nome.toLowerCase())
-		if (existente) {
-			setErroLista('Já existe uma lista com esse nome.')
-			return
-		}
-		const criado = await createProject({ name: nome })
-		await updateProject(criado.id, {
-			color: String(corLista),
-			icone: iconeLista,
-		})
-		setNomeLista('')
-		setCriandoLista(false)
+		desfazerTimer.current = window.setTimeout(() => setDesfazer(null), DURACAO_DO_DESFAZER)
 	}
 
 	const nomesDeProjeto = new Map((projetos ?? []).map((p) => [p.id, p]))
+	// `EditarProjeto` trabalha com o projeto inteiro; a tela guarda só o id da
+	// lista selecionada.
+	const projetoEditando: Project | null = editandoLista ? (nomesDeProjeto.get(editandoLista) ?? null) : null
 
 	return (
 		<div className="tela">
@@ -192,10 +208,10 @@ export function Tarefas({
 						aria-pressed={item.key === grupo.key}
 						onClick={() => setListaAtiva(item.key)}
 					>
-						{item.cor >= 0 ? (
+						{item.cor !== null ? (
 							<span
 								className="chip__ponto"
-								style={{ background: corDoIndice(item.cor).hex }}
+								style={{ background: corDe(item.cor).hex }}
 								aria-hidden="true"
 							/>
 						) : null}
@@ -205,13 +221,9 @@ export function Tarefas({
 						</span>
 					</button>
 				))}
-				<button type="button" className="chip chip--acao" onClick={() => setCriandoLista(true)}>
-					<IconeAdicionar size={18} />
-					Lista
-				</button>
 			</div>
 
-			<div className="conteudo" style={{ paddingTop: 'var(--s-3)' }}>
+			<div className="conteudo">
 				{grupo.key !== 'todas' && grupo.key !== 'sem-lista' ? (
 					<div className="secao">
 						<div className="secao-cabecalho">
@@ -267,27 +279,42 @@ export function Tarefas({
 						</div>
 					) : (
 						<>
-						<ul className="linha-grupo">
-							{abertas.map((tarefa) => {
-								const projeto = tarefa.projectId ? nomesDeProjeto.get(tarefa.projectId) : undefined
-								return (
-									<TarefaItem
-										key={tarefa.id}
-										tarefa={tarefa}
-										lista={
-											projeto
-												? { id: projeto.id, nome: projeto.name, cor: Number(projeto.color ?? 0) }
-												: undefined
-										}
-										mostrarData={grupo.key === 'todas'}
-										atrasada={Boolean(tarefa.dueDate && tarefa.dueDate < hoje)}
-										onConcluir={concluir}
-										onEditar={setEditando}
-										onExcluir={setExcluindoTarefa}
-									/>
-								)
-							})}
-						</ul>
+						{faixas.map((faixa) => (
+							<div className="faixa-tarefas" key={faixa.chave}>
+								{/* Um rótulo, não uma seção: 20 px e a contagem. Se só há uma
+								    faixa (o caso comum do dia), o rótulo não aparece — seria
+								    dizer "Hoje" para uma lista que já é a tela inteira. */}
+								{faixas.length > 1 ? (
+									<p className={`faixa-tarefas__rotulo faixa-tarefas__rotulo--${faixa.chave}`}>
+										{faixa.titulo}
+										<span className="faixa-tarefas__contagem">{faixa.itens.length}</span>
+									</p>
+								) : null}
+								<ul className="linha-grupo">
+									{faixa.itens.map((tarefa) => {
+										const projeto = tarefa.projectId
+											? nomesDeProjeto.get(tarefa.projectId)
+											: undefined
+										return (
+											<TarefaItem
+												key={tarefa.id}
+												tarefa={tarefa}
+												lista={
+													projeto
+														? { id: projeto.id, nome: projeto.name, cor: projeto.color }
+														: undefined
+												}
+												mostrarData={grupo.key === 'todas'}
+												atrasada={estaAtrasada(tarefa, hoje)}
+												onConcluir={concluir}
+												onEditar={setEditando}
+												onExcluir={setExcluindoTarefa}
+											/>
+										)
+									})}
+								</ul>
+							</div>
+						))}
 						{escondidas > 0 ? (
 							<p className="nota" style={{ padding: '8px 4px' }}>
 								{escondidas} {escondidas === 1 ? 'tarefa escondida' : 'tarefas escondidas'} pelo filtro.
@@ -331,77 +358,31 @@ export function Tarefas({
 				) : null}
 
 				{desfazer ? (
-					<div className="desfazer" role="status" aria-live="polite">
-						<span className="desfazer__texto">Concluída: {desfazer.titulo}</span>
-						<button
-							type="button"
-							className="botao botao--texto"
-							onClick={() => {
-								escrever(() => toggleTask(desfazer.id, false))
-								setDesfazer(null)
-								window.clearTimeout(desfazerTimer.current)
-							}}
-						>
-							Desfazer
-						</button>
-					</div>
+					<FaixaDesfazer
+						texto={`Concluída: ${desfazer.titulo}`}
+						onDesfazer={() => {
+							escrever(() => toggleTask(desfazer.id, false))
+							setDesfazer(null)
+							window.clearTimeout(desfazerTimer.current)
+						}}
+						onFechar={() => {
+							setDesfazer(null)
+							window.clearTimeout(desfazerTimer.current)
+						}}
+					/>
 				) : null}
 			</div>
 
 
-			<Folha titulo="Nova lista" aberta={criandoLista} onFechar={() => setCriandoLista(false)}>
-				<form
-					className="formulario"
-					onSubmit={(evento) => {
-						evento.preventDefault()
-						void salvarLista()
-					}}
-				>
-					<div>
-						<label className="campo-rotulo" htmlFor="lista-nome">
-							Nome
-						</label>
-						<input
-							id="lista-nome"
-							data-foco-inicial
-							className="campo"
-							value={nomeLista}
-							onChange={(evento) => {
-								setNomeLista(evento.target.value)
-								setErroLista(null)
-							}}
-							placeholder="Ex.: Trabalho, Casa, Faculdade"
-							maxLength={60}
-						/>
-						{erroLista ? <p className="nota" style={{ color: 'var(--error)' }}>{erroLista}</p> : null}
-					</div>
-
-					<div>
-						<span className="campo-rotulo">Cor</span>
-						<div className="amostra-cores" role="group" aria-label="Cor da lista">
-							{PALETA.map((cor) => (
-								<button
-									key={cor.indice}
-									type="button"
-									className="amostra-cor"
-									style={{ background: cor.hex }}
-									aria-label={cor.rotulo}
-									aria-pressed={corLista === cor.indice}
-									onClick={() => setCorLista(cor.indice)}
-								/>
-							))}
-						</div>
-					</div>
-
-					<div className="formulario__acoes">
-						<button type="submit" className="botao botao--primario" disabled={!nomeLista.trim()}>
-							Criar lista
-						</button>
-					</div>
-				</form>
-			</Folha>
-
-			{criandoLista ? null : null}
+			{/* Criar lista/projeto: o MESMO formulário completo da central. Antes
+			    este caminho criava com nome e cor e o chip criava com nome — os
+			    dois deixavam o projeto incompleto, ao contrário do que a folha de
+			    Projetos anunciava. */}
+			<CriarProjeto
+				aberto={criandoLista}
+				onFechar={() => setCriandoLista(false)}
+				onCriado={(criado) => setListaAtiva(criado.id)}
+			/>
 
 			{erroEscrita ? (
 				<p className="aviso aviso--erro" role="alert" style={{ margin: '0 var(--s-4) var(--s-3)' }}>
@@ -412,7 +393,8 @@ export function Tarefas({
 			<Folha titulo="Limpar concluídas" aberta={confirmandoLimpar} onFechar={() => setConfirmandoLimpar(false)}>
 				<div className="formulario">
 					<p className="nota">
-						As {concluidas.length} concluídas desta lista serão removidas. Esta ação não tem desfazer.
+						As {concluidas.length} concluídas desta lista serão removidas. Dá para desfazer logo
+						depois.
 					</p>
 					<div className="formulario__acoes">
 						<button type="button" className="botao" onClick={() => setConfirmandoLimpar(false)}>
@@ -421,19 +403,34 @@ export function Tarefas({
 						<button
 							type="button"
 							className="botao botao--perigo-solido"
-							onClick={() =>
+							onClick={() => {
+								const ids = concluidas.map((t) => t.id)
+								setConfirmandoLimpar(false)
 								void executar(async () => {
 									// Uma escrita só (antes: uma transação por tarefa).
-									await softDeleteTasks(concluidas.map((t) => t.id))
-									setConfirmandoLimpar(false)
+									await softDeleteTasks(ids)
+									desfazerLimpeza.anunciar({
+										texto: `Removidas: ${ids.length} ${
+											ids.length === 1 ? 'concluída' : 'concluídas'
+										}`,
+										restaurar: () => restaurarTasks(ids),
+									})
 								}, 'Não foi possível limpar as concluídas.')
-							}
+							}}
 						>
 							Limpar
 						</button>
 					</div>
 				</div>
 			</Folha>
+
+			{desfazerLimpeza.pendente ? (
+				<FaixaDesfazer
+					texto={desfazerLimpeza.pendente.texto}
+					onDesfazer={desfazerLimpeza.desfazer}
+					onFechar={desfazerLimpeza.fechar}
+				/>
+			) : null}
 
 			<EditarTarefa
 				tarefa={editando}
@@ -443,126 +440,30 @@ export function Tarefas({
 				etiquetasConhecidas={[...new Set((tarefas ?? []).flatMap((t) => t.tags ?? []))].sort()}
 			/>
 
-			{/* Exclusão a partir do atalho da linha. Antes o único caminho era
-			    abrir a tarefa e descer até "Excluir". Com confirmação porque a
-			    lista não tem desfazer para exclusão (só para conclusão). */}
-			<ConfirmarExclusaoTarefa
-				tarefa={excluindoTarefa}
+			{/* Exclusão a partir do atalho da linha: confirmação + desfazer, o
+			    mesmo componente do Início, Projeto e Agenda. */}
+			<ExcluirComDesfazer
+				alvo={excluindoTarefa ? { id: excluindoTarefa.id, titulo: excluindoTarefa.title } : null}
+				titulo="Excluir tarefa"
+				descricao={(alvo) => (
+					<>
+						Excluir <strong>{alvo.titulo}</strong>? Ela sai de todas as visões deste aparelho.
+					</>
+				)}
 				onFechar={() => setExcluindoTarefa(null)}
-				onExcluir={async (alvo) => {
-					await softDeleteTask(alvo.id)
-					setExcluindoTarefa(null)
-				}}
+				onExcluir={(alvo) => softDeleteTask(alvo.id)}
+				onDesfazer={(alvo) => restaurarTask(alvo.id)}
 			/>
 
-			{editandoLista ? (
-				<EditarLista
-					id={editandoLista}
-					nomeInicial={nomesDeProjeto.get(editandoLista)?.name ?? ''}
-					corInicial={Number(nomesDeProjeto.get(editandoLista)?.color ?? 0)}
-					onFechar={() => setEditandoLista(null)}
-				/>
-			) : null}
+			{/* Editar lista usa o MESMO formulário do projeto: antes era um
+			    `EditarLista` com nome e cor só, e o usuário que aprendeu a
+			    editar aqui não encontrava categoria, prazo nem etapa. */}
+			<EditarProjeto
+				projeto={projetoEditando}
+				aberto={projetoEditando !== null}
+				onFechar={() => setEditandoLista(null)}
+				onExcluido={() => setListaAtiva('todas')}
+			/>
 		</div>
-	)
-}
-
-/** Editar nome, cor e existência de uma lista. */
-function EditarLista({
-	id,
-	nomeInicial,
-	corInicial,
-	onFechar,
-}: {
-	id: string
-	nomeInicial: string
-	corInicial: number
-	onFechar: () => void
-}) {
-	const [nome, setNome] = useState(nomeInicial)
-	const [cor, setCor] = useState(corInicial)
-	const [confirmando, setConfirmando] = useState(false)
-
-	return (
-		<Folha
-			titulo="Editar lista"
-			aberta
-			onFechar={onFechar}
-			passo={confirmando ? 'excluir' : 'editar'}
-		>
-			{confirmando ? (
-				<div className="formulario">
-					<p className="nota">
-						Excluir <strong>{nomeInicial}</strong> também remove as tarefas e páginas que estão nela.
-					</p>
-					<div className="formulario__acoes">
-						<button type="button" className="botao" onClick={() => setConfirmando(false)}>
-							Manter
-						</button>
-						<button
-							type="button"
-							className="botao botao--perigo-solido"
-							onClick={() => {
-								void softDeleteProject(id)
-								onFechar()
-							}}
-						>
-							Excluir
-						</button>
-					</div>
-				</div>
-			) : (
-				<form
-					className="formulario"
-					onSubmit={(evento) => {
-						evento.preventDefault()
-						if (!nome.trim()) return
-						void updateProject(id, { name: nome.trim(), color: String(cor) })
-						onFechar()
-					}}
-				>
-					<div>
-						<label className="campo-rotulo" htmlFor="lista-ed-nome">
-							Nome
-						</label>
-						<input
-							id="lista-ed-nome"
-							data-foco-inicial
-							className="campo"
-							value={nome}
-							onChange={(evento) => setNome(evento.target.value)}
-							maxLength={60}
-						/>
-					</div>
-
-					<div>
-						<span className="campo-rotulo">Cor</span>
-						<div className="amostra-cores" role="group" aria-label="Cor da lista">
-							{PALETA.map((item) => (
-								<button
-									key={item.indice}
-									type="button"
-									className="amostra-cor"
-									style={{ background: item.hex }}
-									aria-label={item.rotulo}
-									aria-pressed={cor === item.indice}
-									onClick={() => setCor(item.indice)}
-								/>
-							))}
-						</div>
-					</div>
-
-					<div className="formulario__acoes" style={{ justifyContent: 'space-between' }}>
-						<button type="button" className="botao botao--perigo" onClick={() => setConfirmando(true)}>
-							<IconeApagar size={18} />
-							Excluir
-						</button>
-						<button type="submit" className="botao botao--primario">
-							Salvar
-						</button>
-					</div>
-				</form>
-			)}
-		</Folha>
 	)
 }

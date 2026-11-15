@@ -10,7 +10,7 @@
  * - Datas relativas usam a data local do aparelho, não UTC.
  */
 
-export interface Interpretacao {
+interface Interpretacao {
 	/** Título com as palavras reconhecidas removidas. */
 	titulo: string
 	/** AAAA-MM-DD */

@@ -1,0 +1,242 @@
+/* ---------------------------------------------------------------------------
+   Roda de cores
+
+   Seis tipos (cromática, viva, suave, pastel, sóbria, neutra), um disco, três
+   pinos. O disco é desenhado pelo componente (72 fatias com gradiente radial,
+   memoizadas); aqui ficam moldura, pinos e leitura.
+
+   Regras que este arquivo respeita, e que qualquer mudança futura precisa
+   respeitar:
+
+   - **nada de cor cravada**: pino usa a cor que o JS calculou, e o aro/texto
+     usam os tokens do tema. Um valor fixo como `#fff` aqui reprova no claro.
+   - **alvo de toque**: o desenho do pino pequeno é 20 px, mas o grupo tem uma
+     área invisível de 44 px — o dedo acerta sem o desenho engordar.
+   - **`touch-action: none`**: o gesto é da roda, não da folha. É o que impede
+     arrastar a cor de fechar a folha.
+   --------------------------------------------------------------------------- */
+
+.roda {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--s-3);
+	padding: var(--s-2) 0 var(--s-1);
+}
+
+.roda__palco {
+	position: relative;
+	width: min(100%, 300px);
+	/* Quadrado: o disco e os pinos compartilham o mesmo sistema de coordenadas
+	   (0–300), e o SVG por cima não precisa adivinhar proporção. */
+	aspect-ratio: 1;
+	border-radius: 50%;
+	border: 1px solid var(--outline-variant);
+	overflow: hidden;
+	/* O gesto é nosso: sem isto o navegador trata o arraste vertical como
+	   rolagem e o pino "solta" no meio do caminho. */
+	touch-action: none;
+	overscroll-behavior: contain;
+	-webkit-user-select: none;
+	user-select: none;
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-surface) 6%, transparent);
+}
+
+.roda__campo {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+	overflow: hidden;
+}
+
+/* Camada dos matizes: `conic-gradient` desenhado pelo navegador (GPU). */
+.roda__matizes {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+}
+
+/* Camada neutra: cobre o centro e dissolve até o aro, dando o "cinza → cor". */
+.roda__neutro {
+	position: absolute;
+	inset: 0;
+	border-radius: 50%;
+}
+
+/* Miolo: o mesmo tom neutro do centro, com contorno próprio. */
+.roda__miolo {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 17.33%;
+	aspect-ratio: 1;
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+	background: var(--surface-container-high);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--outline-variant) 70%, transparent);
+	pointer-events: none;
+}
+
+.roda__disco {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	/* O gesto é nosso: sem isto o navegador trata o arraste vertical como
+	   rolagem e o pino "solta" no meio do caminho. */
+	touch-action: none;
+	-webkit-user-select: none;
+	user-select: none;
+	/* O arraste não deve rolar a folha nem puxar para fechar. */
+	overscroll-behavior: contain;
+}
+
+/* No arraste, nada de seleção de texto nem menu de contexto atrapalhando. */
+.roda__palco--arrastando {
+	cursor: grabbing;
+}
+
+.roda__pino {
+	cursor: grab;
+	/* O grupo inteiro é o alvo; o navegador não deve roubar o toque. */
+	touch-action: none;
+	outline: none;
+}
+
+.roda__pino:focus-visible .roda__pino-aro {
+	/* Foco visível sem depender de cor de pino: dois anéis, um claro e um
+	   escuro, funcionam sobre qualquer amostra. */
+	stroke: var(--on-surface);
+	stroke-width: 3;
+}
+
+.roda__pino--ativo .roda__pino-aro {
+	stroke: var(--on-surface);
+	stroke-width: 3;
+}
+
+.roda__pino-aro {
+	/* O aro branco é o que separa a amostra do disco, na tradição dos seletores
+	   de cor. Ele não é "texto", então não precisa de contraste de leitura —
+	   precisa de visibilidade, que o branco e o preto alternados dão. */
+	stroke: #ffffff;
+	stroke-width: 2.5;
+	filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.35));
+}
+
+.roda__pino-centro {
+	fill: rgb(0 0 0 / 0.28);
+	pointer-events: none;
+}
+
+/* O aro branco do pino precisa de um contorno fraco por fora para existir
+   sobre o amarelo e o verde-limão do disco (sem ele o pino "vaza"). O filtro
+   vale nos dois temas: não é cor de texto, é separação de forma. */
+.roda__pino-aro {
+	filter: drop-shadow(0 0 0.5px rgb(0 0 0 / 0.65)) drop-shadow(0 1px 2px rgb(0 0 0 / 0.28));
+}
+
+/* Formação: linhas finas entre a semente e as derivadas durante o gesto. */
+.roda__formacao line {
+	stroke-width: 2.5;
+	stroke-dasharray: 2 6;
+	stroke-linecap: round;
+	opacity: 0.85;
+}
+
+/* Prévia: três amostras retangulares, do mesmo tamanho, na ordem das famílias. */
+.roda__previa {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: var(--s-2);
+	width: min(100%, 300px);
+}
+
+.roda__previa span {
+	height: 34px;
+	border-radius: var(--r-md);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-surface) 14%, transparent);
+}
+
+/* Leitura numérica do pino: matiz em graus e força. Ajuda quem ajusta fino e
+   quem usa leitor de tela (o valor também está em `aria-valuetext`). */
+.roda__leitura {
+	display: flex;
+	gap: var(--s-2);
+	margin: 0;
+	font-size: var(--text-xs);
+	font-weight: var(--w-bold);
+	font-variant-numeric: tabular-nums;
+	color: var(--text-suave);
+	opacity: 0.85;
+}
+
+/* ---------------------------------------------------------------------------
+   Chips de tipo de roda
+   --------------------------------------------------------------------------- */
+
+.tipos-de-roda {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: var(--s-2);
+	padding: var(--s-4) var(--s-4) 0;
+}
+
+/* Na folha da roda, a harmonia tem sete opções e a faixa rolável cortava a
+   última sem indicação. Aqui ela quebra em linhas: são escolhas exclusivas,
+   não um filtro longo, e ver todas de uma vez evita rolar às cegas. */
+.chips--quebra {
+	flex-wrap: wrap;
+	overflow: visible;
+	padding: 6px 0 0;
+}
+
+.tipo-de-roda {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	min-height: var(--toque);
+	padding: var(--s-2) var(--s-3);
+	border-radius: var(--r-md);
+	background: var(--surface-container);
+	color: var(--on-surface);
+	text-align: left;
+	border: 1px solid transparent;
+	transition:
+		background var(--dur) var(--ease),
+		border-color var(--dur) var(--ease);
+}
+
+.tipo-de-roda[aria-pressed='true'] {
+	background: var(--primary-container);
+	color: var(--on-primary-container);
+	border-color: var(--primary);
+}
+
+.tipo-de-roda__nome {
+	font-size: var(--text-sm);
+	font-weight: var(--w-bold);
+	letter-spacing: -0.01em;
+}
+
+/* Três colunas num celular de 360 px dão ~104 px por chip: a descrição não
+   cabe. Ela vai para o `title` e para o texto de apoio abaixo da grade. */
+.tipo-de-roda__amostra {
+	display: flex;
+	gap: 2px;
+	margin-top: 2px;
+}
+
+.tipo-de-roda__amostra span {
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--on-surface) 18%, transparent);
+}
+
+@media (max-width: 380px) {
+	.tipos-de-roda {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}

@@ -1,93 +1,12 @@
-import { useEffect, useMemo } from 'react'
-import type { ComponentType, ReactNode } from 'react'
-import { Link, useRouter } from '@/app/router'
-import type { Route } from '@/app/router'
-import {
-	IconeAjustes,
-	IconeCalendario,
-	IconeFogo,
-	IconeInsights,
-	IconePainel,
-	IconePasta,
-	IconeTarefaFeita,
-} from '@/ui/icones'
+import { useEffect, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
+import { useRouter } from '@/app/router'
+import { IconeInsights } from '@/ui/icones'
+import { BarraInferior } from '@/ui/BarraInferior'
 
-interface Destino {
-	rotulo: string
-	rota: Route
-	icone: ComponentType<{ size?: number | string }>
-	correspondencia: (rota: Route) => boolean
-}
-
-/**
- * Navegação principal — cinco destinos, como no Grit: o trabalho (Hoje),
- * as tarefas por lista, os hábitos, a agenda e os ajustes.
- *
- * A barra é sólida e encosta no rodapé. O botão de criar é um FAB de verdade
- * dentro da tela, não um destino da barra: criar não é um lugar.
- */
-const destinos: Destino[] = [
-	{
-		rotulo: 'Hoje',
-		rota: { name: 'inicio' },
-		icone: IconePainel,
-		correspondencia: (rota) => rota.name === 'inicio',
-	},
-	{
-		rotulo: 'Tarefas',
-		rota: { name: 'tarefas' },
-		icone: IconeTarefaFeita,
-		correspondencia: (rota) => rota.name === 'tarefas',
-	},
-	{
-		rotulo: 'Projetos',
-		rota: { name: 'projetos' },
-		icone: IconePasta,
-		correspondencia: (rota) => rota.name === 'projetos' || rota.name === 'projeto',
-	},
-	{
-		rotulo: 'Hábitos',
-		rota: { name: 'habitos' },
-		icone: IconeFogo,
-		correspondencia: (rota) => rota.name === 'habitos' || rota.name === 'habito',
-	},
-	{
-		rotulo: 'Agenda',
-		rota: { name: 'calendario' },
-		icone: IconeCalendario,
-		correspondencia: (rota) => rota.name === 'calendario',
-	},
-	{
-		rotulo: 'Ajustes',
-		rota: { name: 'ajustes' },
-		icone: IconeAjustes,
-		correspondencia: (rota) => rota.name === 'ajustes',
-	},
-]
-
-function ItemDestino({ destino, ativo }: { destino: Destino; ativo: boolean }) {
-	const Icone = destino.icone
-	return (
-		<Link
-			route={destino.rota}
-			className="destino"
-			ariaLabel={destino.rotulo}
-			ariaCurrent={ativo ? 'page' : undefined}
-			title={destino.rotulo}
-		>
-			<span className="destino__icone" aria-hidden="true">
-				<Icone size={24} />
-			</span>
-			<span className="destino__rotulo" aria-hidden="true">
-				{destino.rotulo}
-			</span>
-		</Link>
-	)
-}
-
-export interface AppShellProps {
+interface AppShellProps {
 	children: ReactNode
-	/** Esconder a barra (tela de quadro, que usa a tela inteira). */
+	/** Esconder a barra (telas que usam a área inteira, como a conversa). */
 	semNavegacao?: boolean
 	conteudoClassName?: string
 }
@@ -98,27 +17,41 @@ export function AppShell({ children, semNavegacao, conteudoClassName }: AppShell
 	const titulo = useMemo(() => {
 		switch (route.name) {
 			case 'inicio':
-				return 'Urdume Público'
+				return 'Urdume'
 			case 'tarefas':
-				return 'Tarefas — Urdume Público'
+				return 'Tarefas — Urdume'
 			case 'habitos':
-				return 'Hábitos — Urdume Público'
+				return 'Hábitos — Urdume'
 			case 'habito':
-				return 'Hábito — Urdume Público'
+				return 'Hábito — Urdume'
 			case 'calendario':
-				return 'Agenda — Urdume Público'
+				return 'Agenda — Urdume'
 			case 'projetos':
-				return 'Projetos — Urdume Público'
+				return 'Projetos — Urdume'
 			case 'projeto':
-				return 'Projeto — Urdume Público'
+				return 'Projeto — Urdume'
 			case 'jarvis':
-				return 'Jarvis — Urdume Público'
+				return 'Jarvis — Urdume'
 			case 'conversa':
-				return 'Conversar — Urdume Público'
+				return 'Conversar — Urdume'
 			case 'ajustes':
-				return 'Ajustes — Urdume Público'
+				return 'Ajustes — Urdume'
+			case 'ajustes-aparencia':
+				return 'Aparência — Urdume'
+			case 'ajustes-acessibilidade':
+				return 'Acessibilidade — Urdume'
+			case 'ajustes-ia':
+				return 'Inteligência — Urdume'
+			case 'ajustes-dados':
+				return 'Dados — Urdume'
+			case 'ajustes-aparelho':
+				return 'Aparelho — Urdume'
+			case 'ajustes-sobre':
+				return 'Sobre — Urdume'
+			case 'ajustes-navegacao':
+				return 'Navegação — Urdume'
 			default:
-				return 'Urdume Público'
+				return 'Urdume'
 		}
 	}, [route])
 
@@ -132,26 +65,71 @@ export function AppShell({ children, semNavegacao, conteudoClassName }: AppShell
 				Pular para o conteúdo
 			</a>
 
+			{/*
+			  A altura REALMENTE visível.
+
+			  `dvh` acompanha a barra do navegador, não o teclado: com o teclado
+			  aberto no WebView do Android ele continua medindo a tela inteira, e
+			  o rodapé de qualquer lista (Tarefas, Projetos, Hábitos, Agenda,
+			  Páginas, Ajustes) fica atrás dele sem forma de rolar até o fim.
+
+			  Aqui a medida é publicada uma vez para o app inteiro e o `.shell`
+			  usa `--altura-visivel` quando ela existe. Só escreve enquanto o
+			  teclado está aberto (`innerHeight - height > 120`), então em uso
+			  normal o layout continua sendo `dvh` — nada muda onde já funcionava.
+			*/}
+			<AlturaVisivel />
+
 			<main id="conteudo" className={['shell-main', conteudoClassName].filter(Boolean).join(' ')}>
 				{children}
 			</main>
 
-			{semNavegacao ? null : (
-				<nav className="navegacao" aria-label="Navegação principal">
-					<div className="destinos" data-ativo={destinos.findIndex((d) => d.correspondencia(route))}>
-						<span className="destinos__indicador" aria-hidden="true" />
-						{destinos.map((destino) => (
-							<ItemDestino
-								key={destino.rotulo}
-								destino={destino}
-								ativo={destino.correspondencia(route)}
-							/>
-						))}
-					</div>
-				</nav>
-			)}
+			{semNavegacao ? null : <BarraInferior />}
 		</div>
 	)
+}
+
+/**
+ * Publica `--altura-visivel` (e `--teclado-aberto`) no elemento raiz.
+ *
+ * Mede `visualViewport` — a única fonte que reflete o teclado no WebView do
+ * Android — e só escreve quando o teclado está de fato aberto. Em uso normal
+ * as variáveis somem e o CSS volta ao `100dvh`, que é equivalente.
+ *
+ * Usado por `AppShell`; a Conversa tem a própria versão porque lá a conta
+ * também desconta a barra inferior.
+ */
+function AlturaVisivel() {
+	useEffect(() => {
+		const janela = window.visualViewport
+		const raiz = document.documentElement
+		if (!janela) return
+
+		const aplicar = (): void => {
+			// 120 px separa "barra de endereço recolhida" de "teclado aberto":
+			// teclados de celular medem 240–360 px em retrato.
+			const tecladoAberto = window.innerHeight - janela.height > 120
+			if (tecladoAberto) {
+				raiz.style.setProperty('--altura-visivel', `${Math.round(janela.height)}px`)
+				raiz.setAttribute('data-teclado', 'aberto')
+			} else {
+				raiz.style.removeProperty('--altura-visivel')
+				raiz.removeAttribute('data-teclado')
+			}
+		}
+
+		aplicar()
+		janela.addEventListener('resize', aplicar)
+		janela.addEventListener('scroll', aplicar)
+		return () => {
+			janela.removeEventListener('resize', aplicar)
+			janela.removeEventListener('scroll', aplicar)
+			raiz.style.removeProperty('--altura-visivel')
+			raiz.removeAttribute('data-teclado')
+		}
+	}, [])
+
+	return null
 }
 
 /** Atalho para o cabeçalho de tela, com o mesmo padrão em todas as telas. */
@@ -169,8 +147,39 @@ export function Topo({
 	/** Marca acima do título (só no Início, onde o app diz o próprio nome). */
 	marca?: ReactNode
 }) {
+	const referencia = useRef<HTMLElement | null>(null)
+
+	/**
+	 * Publica a altura real do cabeçalho em `--topo-h`.
+	 *
+	 * A ilha do Jarvis é um overlay posicionado logo abaixo do cabeçalho, para
+	 * não cobrir o título. Cravar um número (64 px) erraria no Início, que tem
+	 * a marca acima do título, e com texto grande em Acessibilidade. Medir é o
+	 * que mantém os dois casos certos.
+	 *
+	 * `ResizeObserver` e não `scroll`: a altura muda quando a fonte muda ou a
+	 * tela troca, não quando a página rola.
+	 */
+	useEffect(() => {
+		const elemento = referencia.current
+		if (!elemento) return
+
+		const raiz = document.documentElement
+		const medir = (): void => {
+			raiz.style.setProperty('--topo-h', `${Math.ceil(elemento.getBoundingClientRect().height)}px`)
+		}
+
+		medir()
+		const observador = new ResizeObserver(medir)
+		observador.observe(elemento)
+		return () => {
+			observador.disconnect()
+			raiz.style.removeProperty('--topo-h')
+		}
+	}, [])
+
 	return (
-		<header className={marca ? 'topo topo--com-marca' : 'topo'}>
+		<header ref={referencia} className={marca ? 'topo topo--com-marca' : 'topo'}>
 			{antes}
 			{marca ? <div className="topo__marca">{marca}</div> : null}
 			<div className="topo__linha">

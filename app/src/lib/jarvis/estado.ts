@@ -207,6 +207,44 @@ export async function podarAcoes(dias: number, database: NexoDatabase = db): Pro
 	}
 }
 
+/**
+ * Poda a memória operacional velha.
+ *
+ * `aiMemory` tem duas naturezas misturadas: fato aprendido e contabilidade
+ * interna (o que já foi visto, silenciado, sugerido). Sem poda, a segunda
+ * cresce para sempre — medido, 18.980 linhas em um ano, com `avaliarAgora`
+ * indo de 56 ms a 392 ms.
+ *
+ * O prefixo decide. `fato:` nunca envelhece, porque é conhecimento que o
+ * usuário ensinou; `confianca:` também fica, porque descreve comportamento
+ * recente e é recalculado.
+ */
+export async function podarMemoria(dias: number, database: NexoDatabase = db): Promise<void> {
+	const corte = Date.now() - dias * 86_400_000
+	const PREFIXOS_QUE_ENVELHECEM = [
+		'visto:',
+		'silencio:',
+		'sugestao:',
+		'ia:',
+		'painel:',
+		'aviso:',
+		'ilha:',
+		'gatilho:',
+	]
+
+	try {
+		const linhas = await database.aiMemory.toArray()
+		const antigas = linhas
+			.filter((linha) => PREFIXOS_QUE_ENVELHECEM.some((prefixo) => linha.chave.startsWith(prefixo)))
+			.filter((linha) => linha.atualizadoEm < corte)
+			.map((linha) => linha.id)
+
+		if (antigas.length > 0) await database.aiMemory.bulkDelete(antigas)
+	} catch (causa) {
+		console.warn('Jarvis: falha ao podar a memória operacional.', causa)
+	}
+}
+
 /** Poda execuções antigas (mesmo prazo do diário). */
 export async function podarExecucoes(dias: number, database: NexoDatabase = db): Promise<void> {
 	const corte = Date.now() - dias * 86_400_000

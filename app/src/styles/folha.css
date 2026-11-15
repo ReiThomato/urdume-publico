@@ -13,6 +13,15 @@
 	justify-content: center;
 	background: color-mix(in srgb, var(--scrim) 42%, transparent);
 	animation: fundo-entra var(--dur) var(--ease);
+	/*
+	 * Com o teclado aberto, o fundo sobe o que o teclado ocupa.
+	 *
+	 * Sem isto, a folha tinha a altura certa (a área visível), mas continuava
+	 * alinhada ao rodapé FÍSICO da tela — ou seja, o fim dela ficava atrás do
+	 * teclado. Era o "Criar e Voltar flutuando atrás do teclado".
+	 */
+	padding-bottom: var(--folha-teclado, 0px);
+	transition: padding-bottom 120ms var(--ease);
 }
 
 .folha {
@@ -21,19 +30,67 @@
 	flex-direction: column;
 	width: 100%;
 	max-width: 600px;
-	max-height: calc(100dvh - env(safe-area-inset-top) - 24px);
+	/*
+	 * Altura = a área REALMENTE visível, medida com `visualViewport`.
+	 *
+	 * Com o teclado aberto, `100dvh` continua medindo a tela inteira no WebView
+	 * do Android (o comportamento é o de `lvh`): o fim do formulário ficava
+	 * atrás do teclado e, como o `body` está com `overflow: hidden`, não havia
+	 * como rolar até "Salvar". `--folha-altura` é publicada por `Folha.tsx`.
+	 *
+	 * Três camadas, de propósito:
+	 *   1. `--folha-altura` (JS, preciso) quando existe;
+	 *   2. `dvh` menos a safe area do topo (sem JS, WebView moderno);
+	 *   3. `100%` do `.folha-fundo` (WebView muito antigo) — o fundo é `inset:0`,
+	 *      então 100% nunca estoura a janela.
+	 */
+	max-height: var(--folha-altura, 100%);
 	background: var(--surface-container-low);
 	border-radius: var(--r-3xl) var(--r-3xl) 0 0;
 	box-shadow: var(--elev-3);
+	/*
+	 * Safe area no TOPO também.
+	 *
+	 * `--folha-altura` vem de `visualViewport.height`, que mede a área entre as
+	 * barras do sistema — mas a folha é posicionada dentro do `.folha-fundo`,
+	 * que é `inset: 0` e por isso começa em y=0, DEBAIXO da barra de status.
+	 * Resultado no aparelho: folha alta ocupava a tela toda e o título "Criar"
+	 * ficava parcialmente escondido atrás do relógio (medido: topo da folha em
+	 * y=860 num aparelho com 104 px de barra de status e viewport de 2140).
+	 * Com a reserva aqui, a folha encosta na barra em vez de passar por baixo.
+	 */
+	padding-top: env(safe-area-inset-top);
 	padding-bottom: env(safe-area-inset-bottom);
-	animation: folha-sobe var(--dur-slow) var(--ease-emphasized);
+	/* 240 ms e não 320: a folha é aberta a cada tarefa editada — a 320 ms, a
+	   quarta abertura da sessão já parece lenta. */
+	animation: folha-sobe 240ms var(--ease-emphasized);
 	overflow: hidden;
+	/*
+	 * `pan-y` no painel inteiro: o WebView entrega o gesto vertical ao
+	 * componente em vez de consumi-lo como rolagem. O corpo continua rolando
+	 * normalmente por dentro (ele tem `overflow-y: auto`), e a lógica em
+	 * `Folha.tsx` desiste do arrasto quando o dedo começa sobre uma área que
+	 * ainda pode rolar — então rolar a lista não fecha a folha.
+	 */
+	touch-action: pan-y;
+	/* O painel recebe o foco em folha sem campo; o contorno de foco nele
+	   desenharia um retângulo em volta da folha inteira. */
+	outline: none;
 }
 
+/*
+ * Alça de arrasto.
+ *
+ * 12+4+12 = 28 px era folgado num cabeçalho que já é alça: duas faixas de
+ * gesto empilhadas somavam 80 px antes do título, e o "espaço grande no topo"
+ * que se via era isso. Agora 8+4+6 = 18 px. O alvo de gesto continua largo,
+ * porque o cabeçalho inteiro também arrasta e ele tem 44+ px.
+ */
 .folha__alca {
 	display: flex;
 	justify-content: center;
-	padding: 8px 0 4px;
+	align-items: center;
+	padding: var(--s-2) 0 var(--s-1-5);
 	touch-action: none;
 	cursor: grab;
 	flex-shrink: 0;
@@ -47,15 +104,22 @@
 	width: 32px;
 	height: 4px;
 	border-radius: var(--r-pill);
-	background: var(--outline-variant);
+	background: var(--outline);
 	flex-shrink: 0;
 }
 
+/*
+ * Cabeçalho, corpo e rodapé no MESMO recuo.
+ *
+ * Antes o cabeçalho recuava 20 px e o formulário 16: em toda folha com campo
+ * o título dobrava a coluna 4 px à direita do primeiro input. O padrão do app
+ * é `--s-4` (as 11 telas usam), então é `--s-4` aqui também.
+ */
 .folha__cabecalho {
 	display: flex;
 	align-items: center;
 	gap: var(--s-3);
-	padding: var(--s-4) var(--s-5) var(--s-2);
+	padding: 0 var(--s-4) var(--s-1);
 	flex-shrink: 0;
 }
 
@@ -73,7 +137,7 @@
 }
 
 .folha__sobre {
-	margin-top: 2px;
+	margin-top: var(--s-0-5);
 	font-size: var(--text-sm);
 	color: var(--on-surface-variant);
 }
@@ -86,15 +150,35 @@
 	overflow-y: auto;
 	overscroll-behavior: contain;
 	-webkit-overflow-scrolling: touch;
+	/*
+	 * Só a safe area. Havia 8 px fixos somados a ela, e cada bloco de conteúdo
+	 * (lista, formulário) já traz o próprio respiro embaixo: a soma dava uma
+	 * faixa vazia de ~24 px no fim de toda folha, que é o "espaço grande na
+	 * parte de baixo" que o dono apontou.
+	 */
+	/* Topo do corpo com respiro: sem isto o primeiro elemento encosta no
+	   subtítulo do cabeçalho. A queixa foi precisa — "elementos muito colados
+	   nas áreas superior e inferior do contêiner".
+	   A base fica com `--s-5` porque o rodapé tem borda própria; somar a safe
+	   area aqui de novo criava a faixa vazia que já foi corrigida antes. */
+	padding: var(--s-3) 0 var(--s-5);
+}
+
+/* Troca de etapa (escolha → formulário). `Folha.tsx` já expõe `passo`; agora
+   ele também vira chave de animação, então a folha não "corta" de conteúdo. */
+.folha__corpo[data-passo] {
+	animation: folha-etapa 140ms var(--ease);
 }
 
 .folha__rodape {
 	display: flex;
 	gap: var(--s-3);
 	align-items: center;
-	padding: var(--s-3) var(--s-5) var(--s-4);
-	border-top: 1px solid color-mix(in srgb, var(--outline-variant) 50%, transparent);
+	padding: var(--s-3) var(--s-4);
+	border-top: var(--hairline) solid var(--divisor);
+	border-top: var(--hairline) solid color-mix(in srgb, var(--divisor) 50%, transparent);
 	background: var(--surface-container-low);
+	padding-bottom: max(var(--s-3), env(safe-area-inset-bottom));
 	flex-shrink: 0;
 }
 
@@ -115,6 +199,13 @@
 	}
 }
 
+@keyframes folha-etapa {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+}
+
 @media (min-width: 900px) {
 	.folha-fundo {
 		align-items: center;
@@ -124,13 +215,10 @@
 	.folha {
 		border-radius: var(--r-3xl);
 		max-height: min(86dvh, 800px);
-		animation: folha-surge var(--dur-slow) var(--ease-emphasized);
+		animation: folha-surge 240ms var(--ease-emphasized);
 	}
 
-	.folha__alca {
-		display: none;
-	}
-
+	.folha__alca,
 	.folha__puxador {
 		display: none;
 	}
@@ -140,5 +228,13 @@
 	from {
 		transform: scale(0.96);
 		opacity: 0;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.folha-fundo,
+	.folha,
+	.folha__corpo[data-passo] {
+		animation: none;
 	}
 }

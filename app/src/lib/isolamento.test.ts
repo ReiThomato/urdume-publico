@@ -93,6 +93,25 @@ describe('o que a variante não tem', () => {
 		expect(await existe('app/src/ui/SecaoSync.tsx')).toBe(false)
 	})
 
+	it('nenhum vestígio do motor de inteligência exclusivo', async () => {
+		// O motor de memória em grafo, os pensamentos automáticos, o perfil e os
+		// insights são a parte que fica só na versão principal. Se algum deles
+		// voltar para cá, a variante deixa de ser "enxuta" — e passa a prometer
+		// um comportamento que não tem.
+		for (const modulo of [
+			'app/src/lib/jarvis/memorias.ts',
+			'app/src/lib/jarvis/vinculos.ts',
+			'app/src/lib/jarvis/pensamentos.ts',
+			'app/src/lib/jarvis/perfil.ts',
+			'app/src/lib/jarvis/insights.ts',
+			'app/src/lib/jarvis/recusas.ts',
+			'app/src/lib/jarvis/padroes.ts',
+			'app/src/lib/jarvis/assuntos.ts',
+		]) {
+			expect(await existe(modulo), `${modulo} não deveria existir`).toBe(false)
+		}
+	})
+
 	it('nenhum endereço privado do autor', async () => {
 		const arquivos = [
 			'app/src/db/db.ts',

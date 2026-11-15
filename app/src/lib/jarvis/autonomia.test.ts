@@ -68,14 +68,25 @@ describe('autonomia de baixo risco', () => {
 		expect(tarefas[0]!.projectId).toBe('p1')
 	})
 
-	it('não age em sinal que pede julgamento da IA', async () => {
+	it('age no piso seguro mesmo quando o sinal pede julgamento — sem consumir o julgamento', async () => {
 		await salvarPreferencias({ autonomia: 'confiante', modo: 'ativo' }, banco)
 		const resultado = await agirSozinho(
 			{ itens: [item({ id: 'projeto_criado_vazio', precisaIA: true })] },
 			{},
 			banco,
 		)
-		expect(resultado.executadas).toBe(0)
+
+		/*
+		 * Duas coisas, e o teste guarda as duas:
+		 *
+		 * 1. a ação segura acontece (antes nunca acontecia: o filtro de
+		 *    `precisaIA` pulava o sinal antes de olhar o plano);
+		 * 2. o sinal NÃO é marcado como tratado, senão a iniciativa — que
+		 *    filtra `estado === 'novo'` — perderia a chance de julgar
+		 *    "como estruturar este projeto?".
+		 */
+		expect(resultado.executadas).toBe(1)
+		expect(resultado.tratados).toEqual([])
 	})
 
 	it('não age em sinal que não interrompeu', async () => {

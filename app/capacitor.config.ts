@@ -4,8 +4,8 @@ import type { CapacitorConfig } from '@capacitor/cli'
  * Configuração do APK Android (Capacitor).
  *
  * O app roda 100% do bundle local — nenhuma URL de servidor. Isso mantém o
- * funcionamento offline e faz o WebView servir de `https://localhost`, que é
- * origem segura: service worker, IndexedDB e PWA funcionam.
+ * funcionamento offline e faz o WebView servir uma origem segura: service
+ * worker, IndexedDB e PWA funcionam.
  *
  * O `appId` é PRÓPRIO desta variante (`app.urdume.publico`). Isso é
  * deliberado: o app privado usa `app.nexo.pessoal`. Se os dois usassem o mesmo
@@ -19,13 +19,14 @@ const config: CapacitorConfig = {
 	appName: 'Urdume Público',
 	webDir: 'dist',
 	server: {
-		// Origem http://localhost no WebView.
-		//
-		// Dois motivos: (1) o servidor de sincronização é local e fala ws:// —
-		// a partir de uma origem https:// o WebView bloquearia como conteúdo
-		// misto; (2) o tldraw trata http: como ambiente de desenvolvimento, então
-		// o quadro funciona sem chave de licença dentro do app (a licença
-		// continua valendo para a versão publicada na web).
+		/*
+		 * Não mude sem uma migração de dados.
+		 *
+		 * O IndexedDB é identificado pela ORIGEM (`esquema://host`), não pelo
+		 * appId. Trocar `http` por `https` aqui muda a origem e esconde o banco
+		 * de quem já instalou — o app abre vazio, sem erro e sem explicação.
+		 * Como esta variante publicou uma beta com `http`, o valor fica assim.
+		 */
 		androidScheme: 'http',
 	},
 	android: {

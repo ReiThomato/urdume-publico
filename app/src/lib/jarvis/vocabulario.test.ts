@@ -76,18 +76,31 @@ describe('vocabulário de ações', () => {
 			editar_projeto: { id: 'p1', prazo: '2026-12-01' },
 			criar_marco: { projetoId: 'p1', titulo: 'X' },
 			concluir_marco: { projetoId: 'p1', marcoId: 'm1' },
-			criar_evento: { titulo: 'X', inicio: 1, fim: 2 },
+			criar_evento: { titulo: 'X', dia: '2026-12-01', hora: '15:00' },
 			concluir_evento: { id: 'e1' },
 			criar_lembrete: { texto: 'X' },
 			// Aviso da IA: precisa de título, corpo e horário futuro.
 			avisar: { titulo: 'X', corpo: 'Y', quandoEm: Date.now() + 3_600_000 },
 			criar_habito: { titulo: 'X' },
 			registrar_habito: { id: 'h1' },
-			criar_pagina: { titulo: 'X' },
+			criar_pagina: { titulo: 'X', texto: 'Conteúdo que vira nota no quadro' },
+			escrever_no_quadro: { id: 'pg1', texto: 'Conteúdo que vira nota no quadro' },
 			anotar_em_projeto: { id: 'p1', texto: 'X' },
 			// Anotação datada e organização do projeto (v5).
 			anotar_projeto: { projetoId: 'p1', texto: 'X' },
 			organizar_projeto: { id: 'p1', categoria: 'X' },
+			// Lote declarativo: filtro + operação. `totalDoLote` vem da tela.
+			lote_tarefas: {
+				filtro: { estado: 'atrasada' },
+				operacao: { tipo: 'mover', para: '2026-12-01' },
+				totalDoLote: 3,
+			},
+			// Cobertura dos recursos que o usuário cria na tela.
+			adicionar_subtarefa: { tarefaId: 't1', titulo: 'X' },
+			concluir_subtarefa: { tarefaId: 't1', subtarefaId: 's1' },
+			editar_evento: { id: 'e1', dia: '2026-12-01', hora: '15:00' },
+			editar_habito: { id: 'h1', titulo: 'X' },
+			concluir_lembrete: { id: 'r1' },
 		}
 
 		for (const tipo of tiposDeclarados()) {

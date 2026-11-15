@@ -3,8 +3,6 @@ import { NexoDatabase } from '@/db/db'
 import {
 	createProject,
 	createTask,
-	listPages,
-	createPage,
 	listTasksByDay,
 	softDeleteProject,
 	softDeleteTask,
@@ -84,15 +82,12 @@ describe('tarefas', () => {
 })
 
 describe('projetos', () => {
-	it('exclui o projeto em cascata para tarefas e páginas', async () => {
+	it('exclui o projeto em cascata para as tarefas', async () => {
 		const projeto = await createProject({ name: 'Casa' }, banco)
 		const tarefa = await createTask({ title: 'Comprar tinta', projectId: projeto.id }, banco)
-		const pagina = await createPage({ title: 'Planta', projectId: projeto.id }, banco)
 
 		await softDeleteProject(projeto.id, banco)
 
 		expect((await banco.tasks.get(tarefa.id))?.deletedAt).toBeTypeOf('number')
-		expect((await banco.pages.get(pagina.id))?.deletedAt).toBeTypeOf('number')
-		expect(await listPages(banco)).toHaveLength(0)
 	})
 })

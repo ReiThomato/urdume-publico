@@ -16,12 +16,13 @@ automatizados cobrem lógica, não o comportamento do Android em cada fabricante
 | Conta, login, nuvem | O banco é local (IndexedDB no WebView). Não há servidor. |
 | Sincronizar entre aparelhos | A variante pública não traz sincronização. Cada aparelho é independente. |
 | Quadro de desenho | Removido por licença: o tldraw tem termos próprios. |
+| Memória em grafo, perfil e insights | São exclusivos da versão principal. Aqui o assistente lê o dia e propõe ações; não acumula um grafo de fatos sobre você. |
 | IA sem a sua chave | Não há chave embutida nem proxy. |
 | Widget de tela inicial | Não implementado. |
 | Versão iOS | Só Android e navegador. |
 
 > **Sem sincronização, um aparelho perdido é um banco perdido.** Exporte o
-> backup (Ajustes → Seus dados → Exportar) e guarde fora do celular.
+> backup (Ajustes → Dados → Exportar) e guarde fora do celular.
 
 ## 2. Dados e backup
 
@@ -33,14 +34,15 @@ automatizados cobrem lógica, não o comportamento do Android em cada fabricante
   banco (`allowBackup="false"`) — de propósito, porque a restauração automática
   já fez dados apagados reaparecerem. O efeito colateral é que só existe o
   backup que você exportar.
-- **Migrações são aditivas** (v1 → v5 do schema) e testadas, mas um banco muito
+- **Migrações são aditivas** (v1 → v6 do schema) e testadas, mas um banco muito
   antigo, muito editado ou interrompido no meio de uma migração pode falhar.
   Exporte antes de trocar de versão.
 
 ## 3. A IA
 
 - **Ela propõe, você confirma.** Nunca apaga, nunca muda configuração, nunca
-  mexe em backup.
+  mexe em backup. As únicas ações de volume são as de `lotes.ts`, e elas nunca
+  incluem excluir.
 - **O modelo erra.** Pode inventar uma tarefa, sugerir o projeto errado ou
   devolver JSON inválido. Resposta inválida vira "não entendi" e nada é
   executado; mas uma ação *válida e errada* depende do seu "não é isso" para não
@@ -87,6 +89,7 @@ automatizados cobrem lógica, não o comportamento do Android em cada fabricante
 | Atraso de minutos em notificação | Limitação do agendador do Android |
 | IA responde "não entendi" com modelos pequenos | Modelo menor erra o formato JSON com mais frequência; tente um maior |
 | Importar backup de versão futura | Recusado com mensagem, sem tocar nos dados |
+| Backup de um app antigo com páginas | As páginas não existem mais; o restante do arquivo é importado normalmente |
 
 Encontrou algo que não está aqui? Abra uma issue com o modelo do aparelho, a
 versão do Android e o que aconteceu.
@@ -95,11 +98,12 @@ versão do Android e o que aconteceu.
 
 ## O que foi testado de fato
 
-- **295 testes automatizados** (`npm test`): banco, migrações, mesclagem de
-  dados, sinais do assistente, três dialetos de provedor, higiene do APK.
+- **569 testes automatizados** (`npm test`, 54 arquivos): banco, migrações,
+  sinais do assistente, executor e desfazer, os três dialetos de provedor,
+  higiene do APK e isolamento da variante.
 - **Telas** verificadas em navegador com viewport de celular e dados de exemplo
   (as imagens deste repositório).
-- **APK** compila e instala.
+- **APK** compila.
 
 ## O que **não** foi testado
 
@@ -107,5 +111,5 @@ versão do Android e o que aconteceu.
 - Muitos fabricantes (só um Redmi).
 - Dois aparelhos ao mesmo tempo — não há sincronização, então é por desenho.
 - Chamada real a cada provedor com chave válida: os dialetos são testados sem
-  rede, comparando o corpo e a leitura da resposta.
+  rede, comparando corpo, cabeçalho e leitura da resposta.
 - TalkBack e outros leitores de tela.

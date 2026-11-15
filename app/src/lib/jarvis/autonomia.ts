@@ -1,8 +1,8 @@
 import { db } from '@/db/db'
 import type { NexoDatabase } from '@/db/db'
-import { createTask } from '@/db/repo'
+import { toDayKey } from '@/db/repo'
 import { lerPreferencias } from './estado'
-import { avaliarAcao, executarLote } from './executor'
+import { avaliarAcao, ETIQUETA_AUTONOMA, executarLote } from './executor'
 import type { AcaoDaIA } from './ia'
 import type { ItemDoPainel } from './motor'
 
@@ -13,7 +13,7 @@ import type { ItemDoPainel } from './motor'
  * dedutível do próprio sinal. É o que a auditoria chamou de "a IA não é
  * necessária para o que cabe numa condição booleana".
  *
- * Só existem três, e todas são reversíveis e de um item:
+ * Só existem três famílias, e todas são reversíveis e de um item:
  *
  * 1. `projeto_criado_vazio` → cria uma tarefa "Definir os primeiros passos".
  * 2. `agenda_sem_preparo`   → cria uma tarefa "Preparar: <evento>".
@@ -24,9 +24,22 @@ import type { ItemDoPainel } from './motor'
  *
  * O que NUNCA é autônomo, em nenhum nível: editar projeto, reagendar, criar
  * evento, excluir, mexer em configuração.
+ *
+ * ## O defeito que este arquivo corrigia em si mesmo
+ *
+ * A versão anterior pulava todo sinal com `precisaIA: true` ANTES de olhar os
+ * planos. Como dois dos três planos são justamente sinais de projeto que
+ * carregam `precisaIA: true`, **eles nunca executavam** — eram código morto
+ * com nome plausível. Medido: com os três sinais no painel, só um agia.
+ *
+ * A regra correta: `precisaIA` responde "o que fazer exige julgamento?", que é
+ * uma pergunta sobre o CONTEÚDO da ação. A autonomia responde "quem autoriza
+ * esta ação?", que é uma pergunta sobre RISCO. São eixos diferentes. Um sinal
+ * pode precisar de julgamento e, mesmo assim, ter uma ação de apoio óbvia e
+ * segura — e é exatamente o caso de "projeto criado e vazio".
  */
 
-/** Só essas três ações, por sinal. */
+/** Só essas três famílias, por sinal. */
 const PLANOS: Record<string, (item: ItemDoPainel) => AcaoDaIA | null> = {
 	projeto_criado_vazio: (item) => {
 		const projetoId = item.sinal.entidades[0]
@@ -56,19 +69,35 @@ const PLANOS: Record<string, (item: ItemDoPainel) => AcaoDaIA | null> = {
 		}
 	},
 
-	agenda_sem_preparo: (item) => ({
-		tipo: 'criar_tarefa',
-		dados: { titulo: 'Preparar o compromisso de hoje', prioridade: 2 },
-		motivo: item.sinal.detalhe,
-	}),
+	agenda_sem_preparo: (item) => {
+		/*
+		 * O sinal não carrega a entidade do evento (`entidades` vazio), então a
+		 * ação não pode nomear o compromisso. Antes ela criava a MESMA tarefa
+		 * genérica para cada evento do dia — três compromissos viravam três
+		 * "Preparar o compromisso de hoje" idênticas.
+		 *
+		 * O detalhe do sinal já diz quantos eventos estão sem preparo; usar o
+		 * número no título mantém a ação útil e uma só por dia. `evitarDuplicata`
+		 * impede que o tique seguinte crie a segunda.
+		 */
+		return {
+			tipo: 'criar_tarefa',
+			dados: {
+				titulo: 'Preparar os compromissos de hoje',
+				prioridade: 2,
+				evitarDuplicata: true,
+			},
+			motivo: item.sinal.detalhe,
+		}
+	},
 }
 
 /** Quantas ações autônomas já foram executadas hoje (teto próprio). */
 const TETO_DIARIO = 2
 
-export interface ResultadoAutonomo {
+interface ResultadoAutonomo {
 	executadas: number
-	/** Sinais em que agiu, para não repetir. */
+	/** Sinais que podem ser marcados como tratados (não voltam no tique). */
 	tratados: string[]
 }
 
@@ -100,7 +129,6 @@ export async function agirSozinho(
 	for (const item of painel.itens) {
 		if (acoes.length >= sobra) break
 		if (item.estado !== 'novo' || !item.interrompe) continue
-		if (item.sinal.precisaIA) continue
 
 		const plano = PLANOS[item.sinal.id]
 		if (!plano) continue
@@ -113,12 +141,48 @@ export async function agirSozinho(
 		if (avaliacao.risco !== 'livre') continue
 
 		acoes.push(acao)
-		tratados.push(item.sinal.chave)
+
+		/*
+		 * `tratado` só quando a IA não tem nada a acrescentar.
+		 *
+		 * A ação autônoma aqui é o PISO: a tarefa óbvia e reversível que não
+		 * precisa de julgamento. O sinal que carrega `precisaIA` continua tendo
+		 * algo a dizer ("como estruturar este projeto?"), e marcar como aceito
+		 * apagaria essa chance — a iniciativa filtra `estado === 'novo'`.
+		 *
+		 * Antes, o código fazia o oposto por dois caminhos errados: pulava
+		 * esses sinais por completo (nunca agia) ou, se agisse, consumia o
+		 * julgamento. Agora faz os dois: age no que é seguro e deixa o
+		 * julgamento acontecer.
+		 */
+		if (!item.sinal.precisaIA) tratados.push(item.sinal.chave)
 	}
 
 	if (acoes.length === 0) return { executadas: 0, tratados: [] }
 
-	const resultado = await executarLote(acoes, database)
+	// Ação idempotente: não criar a segunda "Preparar os compromissos de hoje".
+	const semRepeticao: AcaoDaIA[] = []
+	for (const acao of acoes) {
+		if (acao.dados.evitarDuplicata) {
+			const titulo = String(acao.dados.titulo ?? '')
+			const projetoId = typeof acao.dados.projetoId === 'string' ? acao.dados.projetoId : null
+			const hoje = toDayKey(new Date())
+			const abertas = await database.tasks.where('dueDate').equals(hoje).toArray()
+			const existe = abertas.some(
+				(tarefa) =>
+					!tarefa.done &&
+					!tarefa.deletedAt &&
+					tarefa.title === titulo &&
+					(projetoId == null || tarefa.projectId === projetoId),
+			)
+			if (existe) continue
+		}
+		semRepeticao.push(acao)
+	}
+
+	if (semRepeticao.length === 0) return { executadas: 0, tratados }
+
+	const resultado = await executarLote(semRepeticao, database, { autonoma: true })
 	return { executadas: resultado.executadas, tratados }
 }
 
@@ -127,16 +191,19 @@ export async function agirSozinho(
  *
  * O teto é separado do orçamento de atenção: criar uma tarefa de apoio não
  * interrompe ninguém. Mas também não pode virar fábrica de tarefas.
+ *
+ * Conta **lotes autônomos**, não ações da conversa. Antes, aceitar duas
+ * sugestões no chat consumia o teto e o Jarvis parava de agir sozinho no resto
+ * do dia — o usuário não entendia por quê.
  */
 async function contarAcoesHoje(agora: number, database: NexoDatabase): Promise<number> {
 	const inicio = new Date(agora)
 	inicio.setHours(0, 0, 0, 0)
-	const fatos = await database.aiJournal
-		.where('em')
-		.aboveOrEqual(inicio.getTime())
-		.toArray()
+	const lotes = await database.aiActions.where('em').aboveOrEqual(inicio.getTime()).toArray()
 
-	return fatos.filter((fato) => fato.origem === 'ia' && fato.tipo === 'ia').length
+	return lotes
+		.filter((lote) => !lote.desfeitoEm && lote.resumo.startsWith(ETIQUETA_AUTONOMA))
+		.reduce((soma) => soma + 1, 0)
 }
 
 /** Cria uma tarefa de apoio diretamente — usado pelo painel quando o usuário
@@ -158,6 +225,3 @@ export async function criarTarefaDeApoio(
 export function temAcaoDeApoio(item: ItemDoPainel): boolean {
 	return item.sinal.id in PLANOS
 }
-
-/** Exportado para o teste conferir que criar tarefa continua sendo createTask. */
-export const _criarTarefa = createTask

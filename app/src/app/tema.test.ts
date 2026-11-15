@@ -29,7 +29,16 @@ function diferencaDeMatiz(a: number, b: number): number {
 	return bruta > 180 ? 360 - bruta : bruta
 }
 
-const PREFERENCIAS = { modo: 'light' as const, amoled: false, semente: '#d96c47', estilo: 'tonal' as const, fonte: 'figtree' as const }
+const PREFERENCIAS = {
+	modo: 'light' as const,
+	amoled: false,
+	semente: '#d96c47',
+	tipo: 'cromatica' as const,
+	harmonia: 'intima' as const,
+	deslocamentos: {},
+	estilo: 'tonal' as const,
+	fonte: 'figtree' as const,
+}
 
 describe('acento derivado da cor-semente', () => {
 	it('mantém a matiz da semente magenta (não vira rosa de outra família)', () => {

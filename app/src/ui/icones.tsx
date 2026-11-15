@@ -3,9 +3,7 @@ import {
 	Plus,
 	Check,
 	CircleCheckBig,
-	Circle,
 	Trash2,
-	Eraser,
 	Pencil,
 	CalendarDays,
 	AlarmClock,
@@ -21,56 +19,38 @@ import {
 	Search,
 	ListFilter,
 	ArrowUpDown,
-	Grid3x3,
 	LayoutDashboard,
-	Layers,
 	StickyNote,
 	Folder,
 	Flag,
 	Tag,
 	Clock,
-	Timer,
 	Repeat,
 	EllipsisVertical,
-	GripVertical,
 	SlidersHorizontal,
-	MessageCircle,
 	Palette,
 	Moon,
 	Sun,
 	Smartphone,
 	Type,
-	Contrast,
 	Accessibility,
 	Download,
 	Upload,
 	Share2,
 	Printer,
-	Link,
-	QrCode,
-	RefreshCw,
-	CheckCheck,
 	CloudOff,
-	SquarePen,
 	TriangleAlert,
 	CalendarClock,
-	CalendarRange,
-	History,
 	Archive,
 	ChartLine,
 	ChartColumn,
-	CircleDashed,
 	ChevronUp,
-	Minus,
-	LayoutGrid,
 	FileText,
 	Zap,
 	Undo2,
-	Redo2,
-	AlignLeft,
-	AlignCenter,
-	AlignRight,
-	ListPlus,
+	EyeOff,
+	MessageCircle,
+	MessagesSquare,
 } from 'lucide-react'
 
 /**
@@ -108,21 +88,9 @@ export function IconeConcluido({ size = 24, strokeWidth = 1.75, ...props }: Prop
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Vazio, a fazer — `Circle`. */
-export function IconeCirculo({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Circle as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
 /** Excluir de vez — `Trash2`. */
 export function IconeApagar({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = Trash2 as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Limpar concluídas — `Eraser`. */
-export function IconeLimpar({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Eraser as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
@@ -216,21 +184,9 @@ export function IconeOrdenar({ size = 24, strokeWidth = 1.75, ...props }: Props)
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Grade do mês — `Grid3x3`. */
-export function IconeGrade({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Grid3x3 as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
 /** Hoje / painel — `LayoutDashboard`. */
 export function IconePainel({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = LayoutDashboard as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Camadas do quadro — `Layers`. */
-export function IconeCamadas({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Layers as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
@@ -264,12 +220,6 @@ export function IconeHorario({ size = 24, strokeWidth = 1.75, ...props }: Props)
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Duração — `Timer`. */
-export function IconeCronometro({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Timer as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
 /** Repete — `Repeat`. */
 export function IconeRepetir({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = Repeat as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
@@ -285,12 +235,6 @@ export function IconeMais({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 /** Menu de contexto — `EllipsisVertical`. */
 export function IconeMaisVertical({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = EllipsisVertical as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Arrastar para reordenar — `GripVertical`. */
-export function IconeArrastar({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = GripVertical as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
@@ -330,12 +274,6 @@ export function IconeTexto({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Alto contraste — `Contrast`. */
-export function IconeContraste({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Contrast as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
 /** Acessibilidade — `Accessibility`. */
 export function IconeAcessibilidade({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = Accessibility as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
@@ -366,39 +304,9 @@ export function IconeImprimir({ size = 24, strokeWidth = 1.75, ...props }: Props
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Link — `Link`. */
-export function IconeLink({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Link as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Código QR — `QrCode`. */
-export function IconeQr({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = QrCode as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Sincronizar — `RefreshCw`. */
-export function IconeSincronizar({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = RefreshCw as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Em dia — `CheckCheck`. */
-export function IconeSincronizado({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = CheckCheck as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
 /** Sem conexão — `CloudOff`. */
 export function IconeOffline({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = CloudOff as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Nova tarefa — `SquarePen`. */
-export function IconeNovaTarefa({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = SquarePen as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
@@ -411,18 +319,6 @@ export function IconeAviso({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 /** Evento — `CalendarClock`. */
 export function IconeEvento({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = CalendarClock as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Hoje — `CalendarRange`. */
-export function IconeHoje({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = CalendarRange as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Histórico — `History`. */
-export function IconeHistorico({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = History as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
@@ -444,12 +340,6 @@ export function IconeGrafico({ size = 24, strokeWidth = 1.75, ...props }: Props)
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Progresso — `CircleDashed`. */
-export function IconeAnel({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = CircleDashed as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
 /** Subir — `ChevronUp`. */
 export function IconeSubir({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = ChevronUp as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
@@ -462,37 +352,7 @@ export function IconeDescer({ size = 24, strokeWidth = 1.75, ...props }: Props) 
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Remover — `Minus`. */
-export function IconeRemover({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Minus as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Tudo feito — `CheckCheck`. */
-export function IconeTudoFeito({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = CheckCheck as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Dia — `Sun`. */
-export function IconeDia({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Sun as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Semana — `CalendarRange`. */
-export function IconeSemana({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = CalendarRange as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Aplicativos — `LayoutGrid`. */
-export function IconeApps({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = LayoutGrid as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Quadros, páginas e notas — `FileText`. */
+/** Documento e anotações — `FileText`. */
 export function IconeDescricao({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = FileText as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
@@ -510,55 +370,19 @@ export function IconeDesfazer({ size = 24, strokeWidth = 1.75, ...props }: Props
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Refazer — `Redo2`. */
-export function IconeRefazer({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Redo2 as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
+/** Ocultar bloco — `EyeOff`. */
+export function IconeOcultar({ size = 24, strokeWidth = 1.75, ...props }: Props) {
+	const Icone = EyeOff as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Alinhamento — `AlignLeft`. */
-export function IconeAlinhamento({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = AlignLeft as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
+/** Conversa com o Jarvis — `MessageCircle`. */
+/** Duas conversas sobrepostas: é o ícone de "trocar de conversa". */
+export function IconeConversas({ size = 24, strokeWidth = 1.75, ...props }: Props) {
+	const Icone = MessagesSquare as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
 }
 
-/** Grade — `Grid3x3`. */
-export function IconeGrelha({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = Grid3x3 as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Alinhar à esquerda — `AlignLeft`. */
-export function IconeAlinharEsquerda({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = AlignLeft as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Centralizar — `AlignCenter`. */
-export function IconeAlinharCentro({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = AlignCenter as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Alinhar à direita — `AlignRight`. */
-export function IconeAlinharDireita({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = AlignRight as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Adicionar à lista — `ListPlus`. */
-export function IconeListaAdicionar({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = ListPlus as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Lista concluída — `ListChecks`. */
-export function IconeListaFeita({ size = 24, strokeWidth = 1.75, ...props }: Props) {
-	const Icone = ListChecks as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
-	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />
-}
-
-/** Balão de conversa — abre o chat do Jarvis. */
 export function IconeConversa({ size = 24, strokeWidth = 1.75, ...props }: Props) {
 	const Icone = MessageCircle as ComponentType<SVGProps<SVGSVGElement> & { size?: number | string }>
 	return <Icone size={size} strokeWidth={strokeWidth} aria-hidden focusable="false" {...props} />

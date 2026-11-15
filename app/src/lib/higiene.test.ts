@@ -116,20 +116,17 @@ describe('configuração de plataforma', () => {
 		expect(regras).toContain('domain="database"')
 	})
 
-	it('o versionCode existe e o applicationId é o da variante', async () => {
+	it('o versionCode do APK avança entre entregas', async () => {
 		const fs = await import('node:fs')
 		const gradle = fs.readFileSync(
 			new URL('../../android/app/build.gradle', import.meta.url),
 			'utf-8',
 		)
 
-		// Esta é a PRIMEIRA entrega da variante, então versionCode 1 está
-		// certo. O que não pode acontecer é o applicationId do app privado:
-		// instalar a variante passaria a substituí-lo no mesmo celular.
 		const achado = /versionCode\s+(\d+)/.exec(gradle)
 		expect(achado, 'build.gradle sem versionCode').not.toBeNull()
-		expect(gradle).toContain('applicationId "app.urdume.publico"')
-		expect(gradle).not.toContain('app.nexo.pessoal')
+		// Esteve em 1 por todas as entregas: o Android não via versão nova.
+		expect(Number(achado![1])).toBeGreaterThan(1)
 	})
 
 	it('o service worker não é registrado dentro do APK', async () => {

@@ -26,11 +26,11 @@ async function anunciar(tipo: 'habit' | 'habitLog', id: string, database: NexoDa
 const now = (): number => Date.now()
 const visivel = (linha: { deletedAt?: number | null }): boolean => linha.deletedAt == null
 
-export interface NovoHabito {
+interface NovoHabito {
 	title: string
 	description?: string | null
 	icone?: string | null
-	cor?: number | null
+	cor?: number | string | null
 	startMin?: number | null
 	dias?: number[]
 	targetValue?: number
@@ -82,6 +82,12 @@ export async function excluirHabito(id: string, database: NexoDatabase = db): Pr
 	await anunciar('habit', id, database)
 }
 
+/** Desfaz a exclusão de um hábito (usado pela lixeira). */
+export async function restaurarHabito(id: string, database: NexoDatabase = db): Promise<void> {
+	await database.habits.update(id, { deletedAt: null, updatedAt: now() })
+	await anunciar('habit', id, database)
+}
+
 export async function listarHabitos(database: NexoDatabase = db): Promise<Habit[]> {
 	const linhas = await database.habits.toArray()
 	return linhas.filter(visivel).sort((a, b) => a.order - b.order)
@@ -114,6 +120,42 @@ export async function alternarDiaHabito(
 		await anunciar('habitLog', existente.id, database)
 		return false
 	}
+
+	const timestamp = now()
+	const registro: HabitLog = {
+		id: existente?.id ?? createId(),
+		habitId: habito.id,
+		day,
+		value: habito.targetValue && habito.targetValue > 0 ? habito.targetValue : 1,
+		createdAt: existente?.createdAt ?? timestamp,
+		updatedAt: timestamp,
+		deletedAt: null,
+	}
+
+	await database.habitLogs.put(registro)
+	await anunciar('habitLog', registro.id, database)
+	return true
+}
+
+/**
+ * Marca o dia de um hábito, sem alternar.
+ *
+ * Existe porque `alternarDiaHabito` é o gesto da TELA (tocar de novo desfaz um
+ * engano), mas é a operação errada para quem PEDE "registra o hábito de hoje".
+ * A IA usava o toggle: com o hábito já marcado, pedir para registrar
+ * **desmarcava** — o usuário pedia uma coisa e perdia o registro.
+ *
+ * Devolve `true` quando o dia passou a estar marcado (incluindo o caso em que
+ * já estava). Idempotente de propósito: pedir duas vezes não desfaz nada.
+ */
+export async function marcarDiaHabito(
+	habito: Habit,
+	day: string = toDayKey(new Date()),
+	database: NexoDatabase = db,
+): Promise<boolean> {
+	const existente = await database.habitLogs.where('[habitId+day]').equals(chave(habito.id, day)).first()
+
+	if (existente && visivel(existente) && existente.value > 0) return true
 
 	const timestamp = now()
 	const registro: HabitLog = {
@@ -168,15 +210,6 @@ export async function registrarValor(
    -------------------------------------------------------------------------- */
 
 export const DIAS_CURTOS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'] as const
-export const DIAS_NOMES = [
-	'domingo',
-	'segunda',
-	'terça',
-	'quarta',
-	'quinta',
-	'sexta',
-	'sábado',
-] as const
 
 /** O hábito vale neste dia? (sem dias marcados = todos os dias) */
 export function valeNoDia(habito: Pick<Habit, 'dias'>, data: Date): boolean {
@@ -335,30 +368,8 @@ export function useHabitosCalculados(): HabitoCalculado[] | undefined {
 	}, [habitos, registros])
 }
 
-export function useHabito(id: string | null): HabitoCalculado | undefined {
-	const registros = useLiveQuery(async () => (id ? listarRegistros() : []), [id])
-	const habito = useLiveQuery(async () => (id ? db.habits.get(id) : undefined), [id])
-
-	return useMemo(() => {
-		if (!id || !habito || !registros || habito.deletedAt) return undefined
-		return calcularHabito(habito, registros)
-	}, [id, habito, registros])
-}
-
-/** Totais de todos os hábitos, para o bloco do Início. */
-export function useResumoHabitos(): {
-	devidosHoje: number
-	feitosHoje: number
-	melhorSequencia: number
-} | undefined {
-	const calculados = useHabitosCalculados()
-
-	return useMemo(() => {
-		if (!calculados) return undefined
-		return {
-			devidosHoje: calculados.filter((h) => h.valeHoje).length,
-			feitosHoje: calculados.filter((h) => h.concluidoHoje).length,
-			melhorSequencia: calculados.reduce((maior, h) => Math.max(maior, h.sequencia), 0),
-		}
-	}, [calculados])
+/** Hábitos excluídos, para a lixeira. */
+export async function listarHabitosExcluidos(database: NexoDatabase = db): Promise<Habit[]> {
+	const linhas = await database.habits.toArray()
+	return linhas.filter((linha) => linha.deletedAt != null).sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0))
 }

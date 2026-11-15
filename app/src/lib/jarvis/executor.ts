@@ -13,9 +13,11 @@ import {
 	updateTask,
 } from '@/db/repo'
 import { criarEvento, excluirEvento } from '@/db/eventos'
-import { alternarDiaHabito, criarHabito } from '@/db/habitos'
+import { alternarDiaHabito, criarHabito, marcarDiaHabito } from '@/db/habitos'
 import { criarAnotacao, organizarProjeto } from '@/db/repo'
 import type { Priority } from '@/db/db'
+import { aplicarLote, riscoPorVolume, selecionarTarefas } from './lotes'
+import type { FiltroDeTarefas, OperacaoDeLote } from './lotes'
 import { comOrigem, registrarFato } from './diario'
 import { gravarMemoria } from './estado'
 import { idDeNotificacao } from './ponte'
@@ -39,6 +41,164 @@ function horaParaMinutos(valor: unknown): number | null {
 	return hora * 60 + minuto
 }
 
+
+/**
+ * Valida uma data que veio do modelo.
+ *
+ * O modelo escreve "amanhã", "20/11/2026", "sexta" — e `createTask` normaliza
+ * só string vazia. Uma data fora do formato `AAAA-MM-DD` entra no banco como
+ * texto: `'amanhã' < '2026-11-14'` é falso, então a tarefa nunca atrasa; e
+ * `'20/11/2026'` nunca casa com nenhuma comparação, então o prazo nunca avisa.
+ * A tarefa fica invisível para a agenda para sempre.
+ *
+ * Devolve a data normalizada quando é válida, `null` quando não é. Quem chama
+ * decide recusar a ação em vez de gravar lixo.
+ */
+export function diaValido(valor: unknown): string | null {
+	if (typeof valor !== 'string') return null
+	const texto = valor.trim()
+	const achado = /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto)
+	if (!achado) return null
+
+	const ano = Number(achado[1])
+	const mes = Number(achado[2])
+	const dia = Number(achado[3])
+	if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null
+
+	// Rejeita 31/02 e afins: a data tem de existir no calendário.
+	const data = new Date(ano, mes - 1, dia)
+	if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) return null
+
+	return texto
+}
+
+/**
+ * Resolve um instante a partir do que o modelo sabe escrever.
+ *
+ * ## Por que isto existe
+ *
+ * O prompt pedia `quandoEm` em **epoch ms** para lembrete e aviso. O modelo
+ * recebe o dia em texto e a hora cheia — não tem como converter para epoch sem
+ * adivinhar fuso e minuto. Para evento o problema já tinha sido resolvido
+ * aceitando `dia` + `hora`; a mesma lição não havia sido aplicada aqui.
+ *
+ * Medido: um `criar_lembrete` com epoch inventado gravou vencimento em
+ * 2025-01-01 e o app reportou sucesso. Pior: `avisar` era **impossível** de
+ * emitir, porque exige `quandoEm: number` e o modelo não produz um.
+ *
+ * Ordem de confiança:
+ *   1. `dia` (AAAA-MM-DD) + `hora` (HH:MM), no fuso do aparelho;
+ *   2. `quandoEm` em epoch **ms** (maior que 1e12);
+ *   3. `quandoEm` em epoch **segundos** (maior que 1e9);
+ *   4. `emMinutos` (relativo a agora), que o modelo sabe estimar ("daqui a 2 h").
+ *
+ * Devolve `null` quando não dá para saber — e a ação é recusada antes de o
+ * usuário confirmar, em vez de agendar para 1970.
+ */
+export function resolverInstante(dados: Record<string, unknown>, agora = Date.now()): number | null {
+	const dia = diaValido(dados.dia)
+	if (dia) {
+		const horaTexto = typeof dados.hora === 'string' ? /^(\d{1,2}):(\d{2})$/.exec(dados.hora.trim()) : null
+		const h = horaTexto ? Number(horaTexto[1]) : 9
+		const m = horaTexto ? Number(horaTexto[2]) : 0
+		if (h > 23 || m > 59) return null
+
+		const [ano, mes, diaMes] = dia.split('-').map(Number)
+		const instante = new Date(ano!, mes! - 1, diaMes!, h, m, 0, 0).getTime()
+		return Number.isNaN(instante) ? null : instante
+	}
+
+	const numero = (valor: unknown): number | null => {
+		const n = typeof valor === 'string' ? Number(valor) : typeof valor === 'number' ? valor : NaN
+		return Number.isFinite(n) ? n : null
+	}
+
+	const bruto = numero(dados.quandoEm)
+	if (bruto != null) {
+		// 1e12 ms ≈ ano 2001; abaixo disso é segundos (ou lixo).
+		const instante = bruto < 1e12 ? Math.round(bruto * 1000) : Math.round(bruto)
+		const ano = new Date(instante).getFullYear()
+		if (ano < 2000 || ano > 2100) return null
+		return instante
+	}
+
+	const minutos = numero(dados.emMinutos)
+	if (minutos != null && minutos > 0 && minutos <= 60 * 24 * 30) {
+		return agora + Math.round(minutos) * 60_000
+	}
+
+	return null
+}
+
+/**
+ * Resolve o horário de um evento a partir do que o modelo mandou.
+ *
+ * ## Por que isto existe
+ *
+ * A ação pedia `inicio` e `fim` em **epoch ms**, um número que o modelo não tem
+ * como calcular: ele recebe o dia em texto ("2026-11-13") e não recebe o epoch
+ * de agora. O resultado era o defeito que o dono do app viu — a confirmação
+ * aparecia, ele aceitava, e **nenhum evento era criado** no dia e hora
+ * descritos (ou era criado em 1970).
+ *
+ * Agora aceita as três formas, na ordem em que são confiáveis:
+ *
+ * 1. `dia` (AAAA-MM-DD) + `hora` (HH:MM) — o que o modelo sabe produzir;
+ * 2. `inicio` em epoch **ms** (maior que 1e12);
+ * 3. `inicio` em epoch **segundos** (maior que 1e9) — modelos devolvem muito
+ *    isso, e sem a conversão o evento cairia em 1970.
+ *
+ * Devolve `null` quando não dá para saber, e aí a ação é recusada ANTES de o
+ * usuário confirmar — prometer e não fazer é pior que dizer "não entendi".
+ */
+export function resolverHorarioDoEvento(dados: Record<string, unknown>): {
+	inicio: number
+	fim: number
+} | null {
+	const numero = (valor: unknown): number | null => {
+		const n = typeof valor === 'string' ? Number(valor) : typeof valor === 'number' ? valor : NaN
+		return Number.isFinite(n) ? n : null
+	}
+
+	const duracao =
+		(typeof dados.duracaoMin === 'number' && dados.duracaoMin > 0 ? dados.duracaoMin : null) ?? 60
+
+	// 1. Dia + hora, no fuso do aparelho (não em UTC: o evento é local).
+	const dia = typeof dados.dia === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(dados.dia.trim()) : null
+	if (dia) {
+		const horaTexto = typeof dados.hora === 'string' ? /^(\d{1,2}):(\d{2})$/.exec(dados.hora.trim()) : null
+		const h = horaTexto ? Number(horaTexto[1]) : 0
+		const m = horaTexto ? Number(horaTexto[2]) : 0
+		if (h > 23 || m > 59) return null
+
+		const base = new Date(Number(dia[1]), Number(dia[2]) - 1, Number(dia[3]), h, m, 0, 0)
+		if (Number.isNaN(base.getTime())) return null
+		return { inicio: base.getTime(), fim: base.getTime() + duracao * 60_000 }
+	}
+
+	// 2 e 3. Epoch, em ms ou em segundos.
+	const bruto = numero(dados.inicio)
+	if (bruto == null) return null
+
+	// 1e12 ms ≈ ano 2001; qualquer coisa abaixo disso é segundos (ou lixo).
+	const inicio = bruto < 1e12 ? Math.round(bruto * 1000) : Math.round(bruto)
+
+	// Sanidade: um evento fora de 2000–2100 é erro de unidade, não um evento.
+	const ano = new Date(inicio).getFullYear()
+	if (ano < 2000 || ano > 2100) return null
+
+	const fimBruto = numero(dados.fim)
+	let fim: number
+	if (fimBruto != null) {
+		const convertido = fimBruto < 1e12 ? Math.round(fimBruto * 1000) : Math.round(fimBruto)
+		fim = convertido > inicio ? convertido : inicio + duracao * 60_000
+	} else {
+		fim = inicio + duracao * 60_000
+	}
+
+	return { inicio, fim }
+}
+
 /**
  * Executor de ações da IA.
  *
@@ -59,7 +219,7 @@ function horaParaMinutos(valor: unknown): number | null {
  * mudar configuração, mudar autonomia. Esses tipos nem existem no vocabulário.
  */
 
-export type Risco = 'livre' | 'confirmar' | 'proibido'
+type Risco = 'livre' | 'confirmar' | 'confirmar-forte' | 'proibido'
 
 export interface AvaliacaoDaAcao {
 	acao: AcaoDaIA
@@ -107,12 +267,33 @@ export function avaliarAcao(
 		case 'criar_tarefa': {
 			const titulo = exigir('titulo')
 			if (!titulo) return { acao, risco: 'proibido', previa: '', recusa: 'Tarefa sem título.' }
-			const dia = typeof dados.dia === 'string' ? ` para ${dados.dia}` : ''
+
+			// Data em formato estranho é recusada ANTES de o usuário confirmar:
+			// "amanhã" e "20/11/2026" gravados como texto deixam a tarefa fora
+			// da agenda e do sinal de atraso, sem erro visível.
+			if (dados.dia !== undefined && dados.dia !== null && diaValido(dados.dia) == null) {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: `Data inválida em "dia": ${String(dados.dia)}. Use AAAA-MM-DD.`,
+				}
+			}
+			if (dados.prazo !== undefined && dados.prazo !== null && diaValido(dados.prazo) == null) {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: `Data inválida em "prazo": ${String(dados.prazo)}. Use AAAA-MM-DD.`,
+				}
+			}
+
+			const dia = diaValido(dados.dia) ? ` para ${dados.dia}` : ''
 			const hora =
 				typeof dados.hora === 'string' && /^\d{1,2}:\d{2}$/.test(dados.hora)
 					? ` às ${dados.hora}`
 					: ''
-			const prazo = typeof dados.prazo === 'string' ? `, prazo ${dados.prazo}` : ''
+			const prazo = diaValido(dados.prazo) ? `, prazo ${dados.prazo}` : ''
 			return {
 				acao,
 				// No modo conservador, criar tarefa ainda pede confirmação: é o
@@ -131,6 +312,16 @@ export function avaliarAcao(
 			)
 			if (mudancas.length === 0) {
 				return { acao, risco: 'proibido', previa: '', recusa: 'Nada para mudar.' }
+			}
+			for (const campo of ['dia', 'prazo'] as const) {
+				if (dados[campo] !== undefined && dados[campo] !== null && diaValido(dados[campo]) == null) {
+					return {
+						acao,
+						risco: 'proibido',
+						previa: '',
+						recusa: `Data inválida em "${campo}": ${String(dados[campo])}. Use AAAA-MM-DD.`,
+					}
+				}
 			}
 			return {
 				acao,
@@ -158,6 +349,9 @@ export function avaliarAcao(
 			if (!projetoId || !titulo) {
 				return { acao, risco: 'proibido', previa: '', recusa: 'Marco sem projeto ou sem nome.' }
 			}
+			if (typeof dados.data === 'string' && diaValido(dados.data) == null) {
+				return { acao, risco: 'proibido', previa: '', recusa: 'Data de marco inválida. Use AAAA-MM-DD.' }
+			}
 			return {
 				acao,
 				risco: 'confirmar',
@@ -169,6 +363,14 @@ export function avaliarAcao(
 		case 'editar_projeto': {
 			const id = exigir('id')
 			if (!id) return { acao, risco: 'proibido', previa: '', recusa: 'Projeto não identificado.' }
+			if (dados.prazo !== undefined && dados.prazo !== null && diaValido(dados.prazo) == null) {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: `Data inválida em "prazo": ${String(dados.prazo)}. Use AAAA-MM-DD.`,
+				}
+			}
 			// Autonomia nunca autoriza mexer em configuração do projeto sozinha.
 			return {
 				acao,
@@ -223,10 +425,27 @@ export function avaliarAcao(
 		case 'criar_lembrete': {
 			const texto = exigir('texto')
 			if (!texto) return { acao, risco: 'proibido', previa: '', recusa: 'Lembrete sem texto.' }
+
+			// Sem horário, o lembrete é válido (existe para ser visto na lista).
+			// Com horário em formato ilegível, é recusado: agendar para 1970 é
+			// pior que não agendar.
+			const temHorario = dados.dia !== undefined || dados.quandoEm !== undefined || dados.emMinutos !== undefined
+			const instante = temHorario ? resolverInstante(dados) : null
+			if (temHorario && instante == null) {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: 'Não entendi o horário do lembrete. Diga "amanhã às 9h" ou "daqui a 2 horas".',
+				}
+			}
+
 			return {
 				acao,
 				risco: autonomia === 'conservador' ? 'confirmar' : 'livre',
-				previa: `Criar lembrete “${texto}”.`,
+				previa: instante
+					? `Criar lembrete “${texto}” para ${new Date(instante).toLocaleString('pt-BR')}.`
+					: `Criar lembrete “${texto}”.`,
 				recusa: null,
 			}
 		}
@@ -237,17 +456,30 @@ export function avaliarAcao(
 			if (!titulo || !corpo) {
 				return { acao, risco: 'proibido', previa: '', recusa: 'Aviso sem título ou corpo.' }
 			}
-			if (typeof dados.quandoEm !== 'number') {
-				return { acao, risco: 'proibido', previa: '', recusa: 'Aviso sem horário.' }
+
+			/*
+			 * Antes exigia `quandoEm: number`. O modelo não calcula epoch, então
+			 * este tipo — o único canal pelo qual a IA fala fora do app — era
+			 * impossível de emitir: toda tentativa caía em "Aviso sem horário".
+			 * Agora aceita dia+hora e minutos relativos, como o resto.
+			 */
+			const quando = resolverInstante(dados)
+			if (quando == null) {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: 'Aviso sem horário legível. Use "dia" + "hora" ou "emMinutos".',
+				}
 			}
-			const quando = new Date(dados.quandoEm)
+
 			return {
 				acao,
 				// Um aviso não altera dado nenhum do usuário e pode ser cancelado:
 				// é o mesmo risco de um lembrete. Ainda assim, no modo
 				// conservador, a IA só avisa depois de confirmação.
 				risco: autonomia === 'conservador' ? 'confirmar' : 'livre',
-				previa: `Avisar em ${quando.toLocaleString('pt-BR')}: “${titulo}” — ${corpo}`,
+				previa: `Avisar em ${new Date(quando).toLocaleString('pt-BR')}: “${titulo}” — ${corpo}`,
 				recusa: null,
 			}
 		}
@@ -267,10 +499,22 @@ export function avaliarAcao(
 		case 'registrar_habito': {
 			const id = exigir('id')
 			if (!id) return { acao, risco: 'proibido', previa: '', recusa: 'Hábito não identificado.' }
+			/*
+			 * A prévia usa o TÍTULO quando ele vem junto.
+			 *
+			 * `avaliarAcao` é síncrona e não pode consultar o banco, então o
+			 * executor não tem como resolver o id. Quem propõe a ação já conhece
+			 * o nome (a inferência de comportamento, por exemplo) e o inclui em
+			 * `dados.titulo`. Sem ele, a confirmação mostraria um UUID — que é
+			 * ilegível para decidir se aceita.
+			 */
+			const nome = typeof dados.titulo === 'string' && dados.titulo.trim() ? dados.titulo.trim() : id
+			const quando = typeof dados.dia === 'string' ? ` em ${dados.dia}` : ' hoje'
+
 			return {
 				acao,
 				risco: autonomia === 'conservador' ? 'confirmar' : 'livre',
-				previa: `Registrar o hábito ${id} como cumprido${typeof dados.dia === 'string' ? ` em ${dados.dia}` : ' hoje'}.`,
+				previa: `Registrar “${nome}” como cumprido${quando}.`,
 				recusa: null,
 			}
 		}
@@ -334,17 +578,168 @@ export function avaliarAcao(
 			}
 		}
 
+		case 'adicionar_subtarefa': {
+			const tarefaId = exigir('tarefaId')
+			const titulo = exigir('titulo')
+			if (!tarefaId || !titulo) {
+				return { acao, risco: 'proibido', previa: '', recusa: 'Subtarefa sem tarefa ou sem título.' }
+			}
+			return {
+				acao,
+				risco: autonomia === 'conservador' ? 'confirmar' : 'livre',
+				previa: `Acrescentar a subtarefa “${titulo}” à tarefa ${tarefaId}.`,
+				recusa: null,
+			}
+		}
+
+		case 'concluir_subtarefa': {
+			const tarefaId = exigir('tarefaId')
+			const subtarefaId = exigir('subtarefaId')
+			if (!tarefaId || !subtarefaId) {
+				return { acao, risco: 'proibido', previa: '', recusa: 'Subtarefa não identificada.' }
+			}
+			return {
+				acao,
+				risco: autonomia === 'conservador' ? 'confirmar' : 'livre',
+				previa: `Marcar a subtarefa ${subtarefaId} como concluída.`,
+				recusa: null,
+			}
+		}
+
+		case 'editar_evento': {
+			const id = exigir('id')
+			if (!id) return { acao, risco: 'proibido', previa: '', recusa: 'Evento não identificado.' }
+			const mudancas = ['titulo', 'dia', 'hora', 'duracaoMin'].filter(
+				(campo) => dados[campo] !== undefined,
+			)
+			if (mudancas.length === 0) {
+				return { acao, risco: 'proibido', previa: '', recusa: 'Nada para mudar.' }
+			}
+			if (dados.dia !== undefined && diaValido(dados.dia) == null) {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: 'Data de evento inválida. Use AAAA-MM-DD.',
+				}
+			}
+			// Reagendar compromisso altera a agenda de alguém: sempre confirma.
+			return {
+				acao,
+				risco: 'confirmar',
+				previa: `Editar evento ${id}: ${mudancas.map((campo) => `${campo} → ${String(dados[campo])}`).join(', ')}.`,
+				recusa: null,
+			}
+		}
+
+		case 'editar_habito': {
+			const id = exigir('id')
+			if (!id) return { acao, risco: 'proibido', previa: '', recusa: 'Hábito não identificado.' }
+			const mudancas = ['titulo', 'meta', 'unidade', 'dias'].filter(
+				(campo) => dados[campo] !== undefined,
+			)
+			if (mudancas.length === 0) {
+				return { acao, risco: 'proibido', previa: '', recusa: 'Nada para mudar.' }
+			}
+			// Hábito é rotina de longo prazo: sempre confirma, como criar.
+			return {
+				acao,
+				risco: 'confirmar',
+				previa: `Editar hábito ${id}: ${mudancas.join(', ')}.`,
+				recusa: null,
+			}
+		}
+
+		case 'concluir_lembrete': {
+			const id = exigir('id')
+			if (!id) return { acao, risco: 'proibido', previa: '', recusa: 'Lembrete não identificado.' }
+			return {
+				acao,
+				risco: autonomia === 'conservador' ? 'confirmar' : 'livre',
+				previa: `Marcar o lembrete ${id} como feito.`,
+				recusa: null,
+			}
+		}
+
+		case 'lote_tarefas': {
+			const filtro = dados.filtro
+			const operacao = dados.operacao
+
+			if (!filtro || typeof filtro !== 'object') {
+				return { acao, risco: 'proibido', previa: '', recusa: 'Lote sem filtro.' }
+			}
+			if (!operacao || typeof operacao !== 'object') {
+				return { acao, risco: 'proibido', previa: '', recusa: 'Lote sem operação.' }
+			}
+
+			const tipoOperacao = (operacao as { tipo?: unknown }).tipo
+			const permitidas = ['mover', 'concluir', 'reabrir', 'priorizar', 'etiquetar', 'arquivar']
+			if (typeof tipoOperacao !== 'string' || !permitidas.includes(tipoOperacao)) {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: 'Operação de lote não permitida. Excluir não existe em lote.',
+				}
+			}
+
+			/*
+			 * O volume define o risco, e ele é calculado AQUI.
+			 *
+			 * `totalDoLote` é preenchido por quem chama (a tela, que tem o banco).
+			 * Sem contagem, assume-se `confirmar`: nunca "livre por omissão".
+			 * Se o filtro casar mais de 100, a ação é proibida antes de o usuário
+			 * confirmar — não depois.
+			 */
+			const total = typeof dados.totalDoLote === 'number' ? dados.totalDoLote : null
+			const risco = total == null ? 'confirmar' : riscoPorVolume(total)
+
+			if (risco === 'proibido') {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: `${total} itens é acima do limite de 100 por lote. Divida em partes.`,
+				}
+			}
+
+			const rotulo: Record<string, string> = {
+				mover: `mover para ${String((operacao as { para?: unknown }).para ?? '?')}`,
+				concluir: 'marcar como concluídas',
+				reabrir: 'reabrir',
+				priorizar: `mudar prioridade para ${String((operacao as { prioridade?: unknown }).prioridade ?? '?')}`,
+				etiquetar: `etiquetar #${String((operacao as { etiqueta?: unknown }).etiqueta ?? '?')}`,
+				arquivar: 'guardar em "algum dia"',
+			}
+
+			const quantidade =
+				total == null
+					? 'as tarefas que casarem com o filtro'
+					: `${total} ${total === 1 ? 'tarefa' : 'tarefas'}`
+
+			return {
+				acao,
+				risco,
+				previa: `Vou ${rotulo[tipoOperacao]} em ${quantidade}.`,
+				recusa: null,
+			}
+		}
+
 		case 'criar_evento': {
 			const titulo = exigir('titulo')
-			const inicio = Number(dados.inicio)
-			const fim = Number(dados.fim)
-			if (!titulo || !Number.isFinite(inicio) || !Number.isFinite(fim) || fim <= inicio) {
-				return { acao, risco: 'proibido', previa: '', recusa: 'Evento com horário inválido.' }
+			const horario = resolverHorarioDoEvento(dados)
+			if (!titulo || !horario) {
+				return {
+					acao,
+					risco: 'proibido',
+					previa: '',
+					recusa: 'Evento sem dia e hora que eu consiga ler. Diga "sexta às 15h" ou "20/11 às 15h".',
+				}
 			}
 			return {
 				acao,
 				risco: 'confirmar',
-				previa: `Criar evento “${titulo}” em ${new Date(inicio).toLocaleString('pt-BR')}.`,
+				previa: `Criar evento “${titulo}” em ${new Date(horario.inicio).toLocaleString('pt-BR')}.`,
 				recusa: null,
 			}
 		}
@@ -386,7 +781,7 @@ export function avaliarLote(
 	return { avaliacoes: acoes.map((acao) => avaliarAcao(acao, autonomia)), erroDoLote: null }
 }
 
-export interface ResultadoExecucao {
+interface ResultadoExecucao {
 	executadas: number
 	recusadas: number
 	erro: string | null
@@ -395,7 +790,16 @@ export interface ResultadoExecucao {
 }
 
 /**
- * Executa as ações que já foram confirmadas.
+ * Etiqueta do lote: separa o que a autonomia fez do que o usuário aprovou.
+ *
+ * Gravada em `AiActionLog.resumo`, que é a única coluna livre do registro.
+ * Sem ela, `contarAcoesHoje` não distingue "o Jarvis agiu sozinho" de "o
+ * usuário aceitou 2 sugestões na conversa" — e as duas ações da conversa
+ * consumiam o teto de autonomia do dia.
+ */
+export const ETIQUETA_AUTONOMA = '[autônoma]'
+
+/** Executa as ações que já foram confirmadas.
  *
  * Só recebe o que passou por `avaliarLote` e pelo "Sim" do usuário. Mesmo
  * assim, revalida: entre a prévia e o toque, o registro pode ter mudado.
@@ -403,13 +807,35 @@ export interface ResultadoExecucao {
 export async function executarLote(
 	acoes: AcaoDaIA[],
 	database: NexoDatabase = db,
+	opcoes: { autonoma?: boolean } = {},
 ): Promise<ResultadoExecucao> {
 	const loteId = createId()
 	const antes: unknown[] = []
 	let executadas = 0
 	let recusadas = 0
+	/** Por que cada ação recusada caiu — é o que o usuário vê quando falha. */
+	const motivos: string[] = []
 
 	for (const acao of acoes) {
+		/*
+		 * Revalidação obrigatória.
+		 *
+		 * Antes, esta função executava direto o que recebia. Uma ação inválida
+		 * — evento sem horário legível, projeto sem nome — chegava em
+		 * `executarUma`, era recusada lá dentro, e o contador... somava como
+		 * executada quando `executarUma` devolvia um objeto. O resultado foi o
+		 * que o dono do app viu: "1 ação feita" e nada criado.
+		 *
+		 * Classificar antes garante que o número que o usuário lê é o número de
+		 * coisas que mudaram no banco.
+		 */
+		const classificacao = avaliarAcao(acao, 'confiante')
+		if (classificacao.risco === 'proibido') {
+			recusadas++
+			motivos.push(classificacao.recusa ?? `${acao.tipo} inválida.`)
+			continue
+		}
+
 		const resultado = await comOrigem('ia', async () => {
 			try {
 				const snapshot = await executarUma(acao, database)
@@ -418,6 +844,7 @@ export async function executarLote(
 				return true
 			} catch (causa) {
 				console.warn('Jarvis: ação falhou.', causa)
+				motivos.push(causa instanceof Error ? causa.message : `${acao.tipo} falhou.`)
 				return false
 			}
 		})
@@ -427,14 +854,19 @@ export async function executarLote(
 	}
 
 	if (executadas === 0) {
-		return { executadas: 0, recusadas, erro: 'Nenhuma ação pôde ser executada.', loteId: null }
+		return {
+			executadas: 0,
+			recusadas,
+			erro: motivos[0] ?? 'Nenhuma ação pôde ser executada.',
+			loteId: null,
+		}
 	}
 
 	const registro: AiActionLog = {
 		id: loteId,
 		em: Date.now(),
 		tipo: 'lote',
-		resumo: `${executadas} ${executadas === 1 ? 'ação' : 'ações'} da IA`,
+		resumo: `${opcoes.autonoma ? `${ETIQUETA_AUTONOMA} ` : ''}${executadas} ${executadas === 1 ? 'ação' : 'ações'} da IA`,
 		antes,
 		executado: true,
 		desfeitoEm: null,
@@ -472,14 +904,17 @@ async function executarUma(acao: AcaoDaIA, database: NexoDatabase): Promise<unkn
 			const tarefa = await createTask(
 				{
 					title: String(dados.titulo ?? ''),
-					dueDate: typeof dados.dia === 'string' ? dados.dia : toDayKey(new Date()),
+					// `diaValido` e não `typeof === 'string'`: o modelo escreve
+					// "amanhã", e isso entrava no banco como texto sem nunca mais
+					// casar com a agenda nem com o sinal de atraso.
+					dueDate: diaValido(dados.dia) ?? toDayKey(new Date()),
 					projectId: typeof dados.projetoId === 'string' ? dados.projetoId : null,
 					priority: typeof dados.prioridade === 'number' ? (dados.prioridade as 0 | 1 | 2 | 3) : 0,
 					// Hora e prazo existem porque sem eles "me avise às 15h" virava
 					// uma tarefa sem horário — e o alarme nunca existia. A hora entra
 					// como minutos do dia, que é o que o banco guarda.
 					startMin: horaParaMinutos(dados.hora),
-					deadline: typeof dados.prazo === 'string' ? dados.prazo : null,
+					deadline: diaValido(dados.prazo),
 				},
 				database,
 			)
@@ -493,11 +928,13 @@ async function executarUma(acao: AcaoDaIA, database: NexoDatabase): Promise<unkn
 
 			const patch: Record<string, unknown> = {}
 			if (typeof dados.titulo === 'string') patch.title = dados.titulo
-			if (typeof dados.dia === 'string') patch.dueDate = dados.dia
+			if (diaValido(dados.dia)) patch.dueDate = dados.dia
 			if (typeof dados.prioridade === 'number') patch.priority = dados.prioridade
 			if (dados.hora === null) patch.startMin = null
 			else if (typeof dados.hora === 'string') patch.startMin = horaParaMinutos(dados.hora)
-			if (typeof dados.prazo === 'string') patch.deadline = dados.prazo
+			if (diaValido(dados.prazo)) patch.deadline = dados.prazo
+
+			if (Object.keys(patch).length === 0) return null
 
 			await updateTask(id, patch, database)
 			return { tipo: 'task', id, antes: atual }
@@ -530,22 +967,47 @@ async function executarUma(acao: AcaoDaIA, database: NexoDatabase): Promise<unkn
 			const atual = await database.projects.get(id)
 			if (!atual || atual.deletedAt) return null
 
+			const antes = { ...atual }
 			const patch: Record<string, unknown> = {}
-			if (typeof dados.prazo === 'string') patch.prazo = dados.prazo
+			if (diaValido(dados.prazo)) patch.prazo = dados.prazo
 			if (dados.status === 'ativo' || dados.status === 'pausado' || dados.status === 'concluido') {
 				patch.status = dados.status
 			}
+			/*
+			 * Categoria e prioridade.
+			 *
+			 * O prompt ensina esses dois campos desde a rodada anterior, mas o
+			 * executor só aplicava prazo e status: a ação era classificada,
+			 * executada, contada como "1 ação feita" — e o banco não mudava.
+			 * Sucesso falso é pior que erro, porque o usuário para de conferir.
+			 */
+			if (dados.categoria === null) patch.categoria = null
+			else if (typeof dados.categoria === 'string') patch.categoria = dados.categoria
+			if (
+				typeof dados.prioridade === 'number' &&
+				dados.prioridade >= 0 &&
+				dados.prioridade <= 3
+			) {
+				patch.priority = dados.prioridade
+			}
+
+			if (Object.keys(patch).length === 0) return null
 
 			await updateProject(id, patch, database)
-			return { tipo: 'project', id, antes: atual }
+			return { tipo: 'project', id, antes }
 		}
 
 		case 'criar_evento': {
+			const horario = resolverHorarioDoEvento(dados)
+			// Recusa explícita em vez de gravar em 1970: o chamador conta como
+			// recusada e o usuário vê que não foi feito.
+			if (!horario) return null
+
 			const evento = await criarEvento(
 				{
 					title: String(dados.titulo ?? ''),
-					startAt: Number(dados.inicio),
-					endAt: Number(dados.fim),
+					startAt: horario.inicio,
+					endAt: horario.fim,
 				},
 				database,
 			)
@@ -598,10 +1060,11 @@ async function executarUma(acao: AcaoDaIA, database: NexoDatabase): Promise<unkn
 		}
 
 		case 'criar_lembrete': {
+			const quando = resolverInstante(dados)
 			const lembrete = await createReminder(
 				{
 					text: String(dados.texto ?? ''),
-					dueAt: typeof dados.quandoEm === 'number' ? dados.quandoEm : null,
+					dueAt: quando,
 				},
 				database,
 			)
@@ -621,8 +1084,8 @@ async function executarUma(acao: AcaoDaIA, database: NexoDatabase): Promise<unkn
 		case 'avisar': {
 			const titulo = String(dados.titulo ?? '').trim()
 			const corpo = String(dados.corpo ?? '').trim()
-			const quandoEm = Number(dados.quandoEm)
-			if (!titulo || !corpo || !Number.isFinite(quandoEm)) return null
+			const quandoEm = resolverInstante(dados)
+			if (!titulo || !corpo || quandoEm == null) return null
 
 			// O horário precisa estar no futuro: um aviso para ontem toca agora e
 			// ensina o usuário a ignorar notificação.
@@ -670,11 +1133,53 @@ async function executarUma(acao: AcaoDaIA, database: NexoDatabase): Promise<unkn
 			if (!habito || habito.deletedAt) return null
 
 			const dia = typeof dados.dia === 'string' ? dados.dia : toDayKey(new Date())
-			const marcou = await alternarDiaHabito(habito, dia, database)
-			// Alternou para "desmarcado": não era conclusão, então não conta.
+			// Marcar, não alternar: a IA não pode desfazer um registro que o
+			// usuário já tinha. Ver `marcarDiaHabito` em `db/habitos.ts`.
+			const jaEstava = (
+				await database.habitLogs.where('[habitId+day]').equals([id, dia]).first()
+			)
+			const marcou = await marcarDiaHabito(habito, dia, database)
 			if (!marcou) return null
 
-			return { tipo: 'habitLog', id: `${id}:${dia}`, antes: null, criado: { habitId: id, dia } }
+			// Já estava marcado: nada mudou, mas a ação foi cumprida. Devolver
+			// o registro permite o desfazer desmarcar só quando ela marcou de
+			// fato — desfazer um "já estava" não pode apagar o dia do usuário.
+			const eraNovo = !(jaEstava && !jaEstava.deletedAt && jaEstava.value > 0)
+			return eraNovo
+				? { tipo: 'habitLog', id: `${id}:${dia}`, antes: null, criado: { habitId: id, dia } }
+				: { tipo: 'habitLog', id: `${id}:${dia}`, antes: null }
+		}
+
+		case 'lote_tarefas': {
+			/*
+			 * Execução do lote.
+			 *
+			 * Duas responsabilidades: resolver o FILTRO (o que o modelo propôs)
+			 * e APLICAR a operação. A lista de ids é calculada aqui, contra o
+			 * banco — o modelo nunca a vê nem a informa.
+			 */
+			const filtro = dados.filtro as FiltroDeTarefas | undefined
+			const operacao = dados.operacao as OperacaoDeLote | undefined
+			if (!filtro || !operacao) return null
+
+			const tarefas = await database.tasks.toArray()
+			const casadas = selecionarTarefas(tarefas, filtro)
+			if (casadas.length === 0) return null
+
+			const antes = casadas.map((tarefa) => ({ id: tarefa.id, tarefa }))
+			const resultado = await aplicarLote(
+				casadas.map((tarefa) => tarefa.id),
+				operacao,
+				database,
+			)
+			if (resultado.aplicadas === 0) return null
+
+			return {
+				tipo: 'task',
+				id: resultado.ids[0]!,
+				antes,
+				criado: { lote: operacao.tipo, aplicadas: resultado.aplicadas },
+			}
 		}
 
 		case 'anotar_em_projeto': {
@@ -797,8 +1302,11 @@ export async function desfazerLote(
 				project: () => database.projects as unknown as TabelaAtualizavel,
 				event: () => database.events as unknown as TabelaAtualizavel,
 				reminder: () => database.reminders as unknown as TabelaAtualizavel,
-				page: () => database.pages as unknown as TabelaAtualizavel,
 				habit: () => database.habits as unknown as TabelaAtualizavel,
+				// A anotação de projeto é uma entidade própria (`projectNotes`).
+				// Sem esta linha, desfazer "anotar no projeto" não fazia nada e a
+				// função devolvia ok — a nota continuava lá.
+				projectNote: () => database.projectNotes as unknown as TabelaAtualizavel,
 			}
 
 			if (item.tipo === 'habitLog') {
@@ -807,6 +1315,28 @@ export async function desfazerLote(
 				if (habitId && dia) {
 					const habito = await database.habits.get(habitId)
 					if (habito) await alternarDiaHabito(habito, dia, database)
+				}
+			} else if (item.tipo === 'task' && Array.isArray(item.antes)) {
+				/*
+				 * Lote de tarefas: o `antes` é a LISTA de tarefas afetadas.
+				 *
+				 * O desfazer comum assume um registro só e faria
+				 * `update(id, {...lista})` — gravando lixo no campo. Aqui a
+				 * restauração é item a item, com o estado anterior de cada um.
+				 */
+				const lista = item.antes as Array<{ id: string; tarefa: Record<string, unknown> }>
+				for (const entrada of lista) {
+					if (!entrada?.id || !entrada.tarefa) continue
+					await database.tasks.update(entrada.id, {
+						done: entrada.tarefa.done,
+						doneAt: entrada.tarefa.doneAt ?? null,
+						priority: entrada.tarefa.priority ?? 0,
+						dueDate: entrada.tarefa.dueDate ?? null,
+						someday: entrada.tarefa.someday ?? false,
+						tags: entrada.tarefa.tags ?? [],
+						deletedAt: entrada.tarefa.deletedAt ?? null,
+						updatedAt: agora,
+					} as never)
 				}
 			} else {
 				const tabela = tabelas[item.tipo]

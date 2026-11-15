@@ -20,11 +20,6 @@ import { agendar, garantirCanal } from '@/lib/jarvis/notificacoes'
  * perdia o aviso e o app achava que tinha avisado.
  */
 
-export interface AvisoLocal {
-	id: string
-	texto: string
-}
-
 const INTERVALO_MS = 60_000
 
 /** A API do navegador só serve quando o app roda como site. */

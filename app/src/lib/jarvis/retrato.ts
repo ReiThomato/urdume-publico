@@ -1,4 +1,5 @@
-import type { Evento, Habit, HabitLog, Page, Project, Reminder, Task } from '@/db/db'
+import type { Evento, Habit, HabitLog, Project, Reminder, Task } from '@/db/db'
+import { cobraPrazo, estaAtrasada, tipoDaTarefa } from '@/lib/tarefas'
 
 /**
  * Retrato — a fotografia reduzida do app num instante.
@@ -43,6 +44,20 @@ export interface Retrato {
 		subtarefasParadas: number
 		/** Títulos de tarefas recorrentes com 3+ ciclos vencidos. */
 		recorrentesFalhando: string[]
+		/**
+		 * Tarefas marcadas para hoje, com hora quando têm. É o que permite a IA
+		 * falar "às 15h30 você tem X" em vez de só contar quantas existem.
+		 */
+		deHoje: Array<{
+			id: string
+			titulo: string
+			/** HH:MM, ou null quando a tarefa não tem hora. */
+			hora: string | null
+			prioridade: number
+			projeto?: string | null
+			/** Subtarefas abertas, com id — o que permite concluir_subtarefa. */
+			subtarefas?: Array<{ id: string; titulo: string }>
+		}>
 	}
 
 	projetos: Array<{
@@ -57,6 +72,8 @@ export interface Retrato {
 		concluidas: number
 		/** Marcos pendentes com data. */
 		marcosPendentes: number
+		/** Marcos pendentes com id e título — é o que permite concluir_marco. */
+		marcosAbertos?: Array<{ id: string; titulo: string; data: string | null }>
 		marcosAtrasados: number
 		/** Criado há menos de 24 h e sem nenhuma tarefa. */
 		criadoVazio: boolean
@@ -64,6 +81,11 @@ export interface Retrato {
 		ignorado: boolean
 		/** Tarefas deste projeto concluídas hoje (libera o que dependia). */
 		concluidasHoje: number
+		/**
+		 * Próxima tarefa aberta do projeto, por prioridade e ordem. Sem isto a
+		 * IA sabe que o projeto está parado, mas não sabe o que fazer com ele.
+		 */
+		proximoPasso: string | null
 	}>
 
 	agenda: {
@@ -92,7 +114,18 @@ export interface Retrato {
 		feitoHoje: boolean
 		sequencia: number
 		recorde: number
+		/**
+		 * Dias de calendário desde o último registro — ou desde a CRIAÇÃO do
+		 * hábito, quando ele nunca foi marcado.
+		 *
+		 * Era `999` para hábito sem histórico: criar um hábito e vê-lo acusado
+		 * de "999 dias sem registro" é o defeito mais óbvio que este campo
+		 * podia produzir. `999` não era um dado, era um "não sei" escrito como
+		 * número — e o sinal `habito_abandonado` o lia como fato.
+		 */
 		diasSemRegistro: number
+		/** Dias desde a criação; 0 = criado hoje. */
+		diasDesdeCriacao: number
 		consistencia: number
 		/** Meta do dia entre 80% e 99% (registrou, mas não fechou). */
 		metaQuase: boolean
@@ -108,12 +141,6 @@ export interface Retrato {
 		vencidos: number
 		/** Texto dos abertos (máx. 5), para a IA poder citar sem ler o banco. */
 		lista: Array<{ id: string; texto: string; vencido: boolean }>
-	}
-
-	paginas: {
-		total: number
-		/** Título das mais recentes (máx. 5). */
-		recentes: Array<{ id: string; titulo: string; projeto: string | null }>
 	}
 
 	habitosDisponiveis: Array<{ id: string; titulo: string; feitoHoje: boolean }>
@@ -137,8 +164,6 @@ export interface Retrato {
 export interface FontesDoRetrato {
 	tasks: Task[]
 	projects: Project[]
-	/** Opcional: quem já monta um retrato sem páginas não precisa mudar. */
-	pages?: Page[]
 	events: Evento[]
 	habits: Habit[]
 	habitLogs: HabitLog[]
@@ -190,9 +215,17 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 	const seteDiasAtras = agora - 7 * DIA
 
 	const tarefasVisiveis = fontes.tasks.filter(visivel)
-	const abertas = tarefasVisiveis.filter((t) => !t.done && !t.someday)
+	const abertas = tarefasVisiveis.filter((t) => !t.done && !t.someday && tipoDaTarefa(t) !== 'ideia')
 
-	const atrasadas = abertas.filter((t) => !!t.dueDate && t.dueDate < hoje)
+	/**
+	 * Lembrete e ideia ficam fora do que pode gerar atraso.
+	 *
+	 * `atrasadas` é a origem do sinal `tarefa_atrasada` e do "vencida" no
+	 * resumo. Se um lembrete entrasse aqui, criar um simples "ligar para o
+	 * dentista" sem data acenderia a IA no dia seguinte — exatamente o que o
+	 * tipo existe para evitar.
+	 */
+	const atrasadas = abertas.filter((t) => estaAtrasada(t, hoje))
 	const concluidasHoje = tarefasVisiveis.filter(
 		(t) => t.done && t.doneAt != null && chave(new Date(t.doneAt)) === hoje,
 	)
@@ -200,7 +233,7 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 	const semData = abertas.filter((t) => !t.dueDate && !t.deadline && !t.someday)
 	const cargaHoje = abertas.filter((t) => t.dueDate === hoje)
 
-	const diasAtraso = (t: Task): number => (t.dueDate ? diasEntre(t.dueDate, hoje) : 0)
+	const diasAtraso = (t: Task): number => (t.dueDate && cobraPrazo(t) ? diasEntre(t.dueDate, hoje) : 0)
 
 	const relevantes = [...abertas]
 		.sort(
@@ -263,6 +296,13 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 		const criadoHa = agora - (projeto.createdAt ?? agora)
 		const diasParaPrazo = projeto.prazo ? diasEntre(hoje, projeto.prazo) : null
 
+		// Próximo passo: a tarefa aberta mais adiantada do projeto. É a diferença
+		// entre "o projeto está parado" e "o projeto está parado; o próximo passo
+		// é revisar a proposta".
+		const proximo = doProjeto
+			.filter((t) => !t.done && visivel(t) && tipoDaTarefa(t) !== 'ideia')
+			.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || (a.order ?? 0) - (b.order ?? 0))[0]
+
 		return {
 			id: projeto.id,
 			nome: projeto.name,
@@ -273,12 +313,18 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 			abertas: total - feitas,
 			concluidas: feitas,
 			marcosPendentes: marcosPendentes.length,
+			marcosAbertos: marcosPendentes.map((marco) => ({
+				id: marco.id,
+				titulo: marco.titulo,
+				data: marco.data ?? null,
+			})),
 			marcosAtrasados: marcosAtrasados.length,
 			criadoVazio: criadoHa < DIA && total === 0,
 			ignorado: (fontes.projetosIgnorados ?? []).includes(projeto.id),
 			concluidasHoje: doProjeto.filter(
 				(t) => t.done && t.doneAt != null && chave(new Date(t.doneAt)) === hoje,
 			).length,
+			proximoPasso: proximo ? proximo.title : null,
 		}
 	})
 
@@ -344,8 +390,20 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 			.filter((r) => r.habitId === habito.id && visivel(r))
 			.sort((a, b) => (a.day < b.day ? 1 : -1))
 
+		/*
+		 * A criação é o piso de toda conta de hábito.
+		 *
+		 * Sem isso, a "semana" de um hábito criado hoje cobrava os seis dias
+		 * anteriores: marcar "seg e qua" num sábado dava 0 de 2 e acendia
+		 * "Semana fraca num hábito" no mesmo instante em que o hábito nascia.
+		 * O sinal estava certo sobre a aritmética e errado sobre o mundo.
+		 */
+		const criadoEm = chave(new Date(habito.createdAt ?? fontes.agora))
+		const diasDesdeCriacao = Math.max(0, diasEntre(criadoEm, hoje))
 		const ultimo = registros[0]
-		const diasSemRegistro = ultimo ? diasEntre(ultimo.day, hoje) : 999
+		const diasSemRegistro = ultimo
+			? Math.max(0, diasEntre(ultimo.day, hoje))
+			: diasDesdeCriacao
 		const hojeRegistro = registros.find((r) => r.day === hoje)
 		const alvo = habito.targetValue ?? 0
 		const metaQuase =
@@ -355,11 +413,13 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 			minutosUsados.set(habito.startMin, (minutosUsados.get(habito.startMin) ?? 0) + 1)
 		}
 
-		// Semana: registros sobre dias em que o hábito valia nos últimos 7 dias.
+		// Semana: registros sobre dias em que o hábito valia nos últimos 7 dias,
+		// descontando os dias anteriores à criação (ele não devia nada antes de existir).
 		let devidos = 0
 		let feitos = 0
 		for (let i = 0; i < 7; i++) {
 			const dia = chave(new Date(diaParaMs(hoje) - i * DIA))
+			if (dia < criadoEm) continue
 			const vale =
 				(habito.dias ?? []).length === 0 ||
 				(habito.dias ?? []).includes(new Date(diaParaMs(dia)).getDay())
@@ -376,6 +436,7 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 			sequencia: calcularSequencia(habito, registros, hoje),
 			recorde: calcularRecorde(habito, registros, hoje),
 			diasSemRegistro,
+			diasDesdeCriacao,
 			consistencia: devidos === 0 ? 0 : Math.round((feitos / devidos) * 100),
 			metaQuase,
 			feitosNaSemana: feitos,
@@ -403,6 +464,23 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 			atrasoCritico,
 			subtarefasParadas,
 			recorrentesFalhando,
+			deHoje: cargaHoje
+				.sort((a, b) => (a.startMin ?? 1440) - (b.startMin ?? 1440) || (b.priority ?? 0) - (a.priority ?? 0))
+				.slice(0, 8)
+				.map((t) => ({
+					id: t.id,
+					titulo: t.title,
+					hora:
+						t.startMin == null
+							? null
+							: `${String(Math.floor(t.startMin / 60)).padStart(2, '0')}:${String(t.startMin % 60).padStart(2, '0')}`,
+					prioridade: t.priority ?? 0,
+					projeto: fontes.projects.find((p) => p.id === t.projectId)?.name ?? null,
+					subtarefas: (t.subtasks ?? [])
+						.filter((sub) => !sub.done)
+						.slice(0, 5)
+						.map((sub) => ({ id: sub.id, titulo: sub.title })),
+				})),
 		},
 		projetos,
 		agenda: {
@@ -432,19 +510,6 @@ export function montarRetrato(fontes: FontesDoRetrato): Retrato {
 					id: r.id,
 					texto: r.text,
 					vencido: (r.dueAt ?? 0) > 0 && (r.dueAt ?? 0) <= agora,
-				})),
-		},
-
-		paginas: {
-			total: (fontes.pages ?? []).filter(visivel).length,
-			recentes: (fontes.pages ?? [])
-				.filter(visivel)
-				.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))
-				.slice(0, 5)
-				.map((pagina) => ({
-					id: pagina.id,
-					titulo: pagina.title,
-					projeto: fontes.projects.find((p) => p.id === pagina.projectId)?.name ?? null,
 				})),
 		},
 
@@ -545,19 +610,4 @@ function calcularSequencia(
 	}
 
 	return sequencia
-}
-
-/** Retrato vazio — usado quando ainda não há dados e nos testes negativos. */
-export function retratoVazio(hoje: string, agora = Date.now()): Retrato {
-	return montarRetrato({
-		tasks: [],
-		projects: [],
-		pages: [],
-		events: [],
-		habits: [],
-		habitLogs: [],
-		reminders: [],
-		hoje,
-		agora,
-	})
 }

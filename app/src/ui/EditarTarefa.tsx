@@ -7,8 +7,9 @@ import {
 	IconeBandeira,
 	IconeRepetir,
 } from '@/ui/icones'
-import type { Task } from '@/db/db'
+import type { Task, TipoTarefa } from '@/db/db'
 import { interpretar } from '@/lib/interpretar'
+import { ROTULO_DO_TIPO, TIPOS_DE_TAREFA, tipoDaTarefa } from '@/lib/tarefas'
 import { removeSubtask, softDeleteTask, updateTask } from '@/db/repo'
 import { Folha } from '@/ui/Folha'
 import { PALETA } from '@/ui/paleta'
@@ -45,6 +46,7 @@ export function EditarTarefa({
 	const [etiquetas, setEtiquetas] = useState<string[]>([])
 	const [novaEtiqueta, setNovaEtiqueta] = useState('')
 	const [algumDia, setAlgumDia] = useState(false)
+	const [tipo, setTipo] = useState<TipoTarefa>('tarefa')
 	const [notas, setNotas] = useState('')
 	const [semRepetir, setSemRepetir] = useState(true)
 	const [recTipo, setRecTipo] = useState<'diaria' | 'semanal' | 'mensal' | 'dias-uteis'>('diaria')
@@ -66,6 +68,7 @@ export function EditarTarefa({
 		setPrioridade(tarefa.priority ?? 0)
 		setEtiquetas(tarefa.tags ?? [])
 		setAlgumDia(Boolean(tarefa.someday))
+		setTipo(tipoDaTarefa(tarefa))
 		setNotas(tarefa.notes ?? '')
 		setSemRepetir(!tarefa.recurrence)
 		setRecTipo(tarefa.recurrence?.tipo ?? 'diaria')
@@ -95,16 +98,20 @@ export function EditarTarefa({
 
 			await updateTask(tarefa.id, {
 				title: tituloFinal,
-				dueDate: lido?.dia ?? (algumDia ? null : dia || null),
+				tipo,
+				// Lembrete e ideia não ganham dia por omissão: se o usuário não
+				// escolheu, fica sem dia. `someday` acompanha a ideia para os
+				// registros antigos continuarem no mesmo lugar.
+				dueDate: tipo === 'tarefa' ? (lido?.dia ?? (algumDia ? null : dia || null)) : lido?.dia || dia || null,
 				startMin: hora
 					? Number(hora.split(':')[0]) * 60 + Number(hora.split(':')[1])
 					: (lido?.hora ?? null),
 				durationMin: duracao ? Number(duracao) : (lido?.duracao ?? null),
-				deadline: prazo || null,
+				deadline: tipo === 'tarefa' ? prazo || null : null,
 				projectId: projeto || null,
 				priority: prioridade as 0 | 1 | 2 | 3,
 				tags: etiquetas,
-				someday: algumDia,
+				someday: tipo === 'ideia',
 				notes: notas || null,
 				// Guarda os campos que a UI não edita (dias da semana, limite,
 				// número de vezes) em vez de descartá-los ao salvar.
@@ -160,6 +167,26 @@ export function EditarTarefa({
 					}}
 				>
 					<div>
+						<span className="campo-rotulo">Tipo</span>
+						<div className="segmentado" role="group" aria-label="Tipo da tarefa">
+							{TIPOS_DE_TAREFA.map((valor) => (
+								<button
+									key={valor}
+									type="button"
+									className="segmentado__item"
+									aria-pressed={tipo === valor}
+									onClick={() => setTipo(valor)}
+								>
+									{ROTULO_DO_TIPO[valor].nome}
+								</button>
+							))}
+						</div>
+						<p className="nota" style={{ marginTop: 6 }}>
+							{ROTULO_DO_TIPO[tipo].descricao}
+						</p>
+					</div>
+
+					<div>
 						<label className="campo-rotulo" htmlFor="ed-titulo">
 							Título
 						</label>
@@ -185,7 +212,7 @@ export function EditarTarefa({
 								className="campo campo--compacto"
 								type="date"
 								value={dia}
-								disabled={algumDia}
+								disabled={tipo !== 'tarefa' || algumDia}
 								onChange={(evento) => setDia(evento.target.value)}
 							/>
 						</div>
@@ -198,8 +225,12 @@ export function EditarTarefa({
 								className="campo campo--compacto"
 								type="date"
 								value={prazo}
+								disabled={tipo !== 'tarefa'}
 								onChange={(evento) => setPrazo(evento.target.value)}
 							/>
+							{tipo !== 'tarefa' ? (
+								<p className="nota">Só tarefa tem prazo. Lembrete e ideia não vencem.</p>
+							) : null}
 						</div>
 					</div>
 

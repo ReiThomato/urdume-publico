@@ -227,12 +227,10 @@ describe('prompt e custo', () => {
 	})
 })
 
-describe('o resumo diz a verdade sobre lembretes, hábitos e páginas', () => {
+describe('o resumo diz a verdade sobre lembretes e hábitos', () => {
 	it('inclui os itens reais, não só contagens', () => {
 		const retrato = montarRetrato({
-			tasks: [], projects: [], pages: [
-				{ id: 'pg1', title: 'Rascunho do layout', projectId: null, order: 0, createdAt: 1, updatedAt: 2 } as never,
-			],
+			tasks: [], projects: [],
 			events: [], habits: [
 				{ id: 'h1', title: 'Ler', order: 0, dias: [], targetValue: 0, targetUnit: '', createdAt: 1, updatedAt: 1 } as never,
 			],
@@ -246,6 +244,5 @@ describe('o resumo diz a verdade sobre lembretes, hábitos e páginas', () => {
 
 		expect(resumo).toContain('[r1] Ligar para o fornecedor')
 		expect(resumo).toContain('[h1] Ler')
-		expect(resumo).toContain('[pg1] Rascunho do layout')
 	})
 })

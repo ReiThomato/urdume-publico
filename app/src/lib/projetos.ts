@@ -1,5 +1,6 @@
 import type { Marco, Project, Task } from '@/db/db'
 import { chaveDoDia, diaDeHoje } from '@/lib/date'
+import { estaAtrasada } from '@/lib/tarefas'
 
 /**
  * Leitura de um projeto para a central de gerenciamento.
@@ -56,10 +57,9 @@ export function resumirProjeto(projeto: Project, tarefas: Task[]): ResumoDoProje
 	const abertas = visiveis.length - concluidas
 	const hoje = chaveDoDia(diaDeHoje())
 
-	// "Atrasada" = tarefa aberta cujo dia ou prazo já passou.
-	const atrasadas = visiveis.filter(
-		(t) => !t.done && ((t.dueDate && t.dueDate < hoje) || (t.deadline && t.deadline < hoje)),
-	).length
+	// "Atrasada" = tarefa que cobra dia e já passou. Lembrete e ideia não
+	// entram: eles não têm prazo por definição.
+	const atrasadas = visiveis.filter((t) => estaAtrasada(t, hoje)).length
 
 	const proxima =
 		visiveis

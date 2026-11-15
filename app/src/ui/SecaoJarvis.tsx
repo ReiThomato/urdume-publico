@@ -9,7 +9,7 @@ import {
 	salvarProvedor,
 	temChaveApi,
 } from '@/lib/jarvis/segredo'
-import { LISTA_DE_PROVEDORES, PROVEDOR_PADRAO, PROVEDORES } from '@/lib/jarvis/provedores'
+import { PROVEDOR_PADRAO, PROVEDORES } from '@/lib/jarvis/provedores'
 import type { IdProvedor } from '@/lib/jarvis/provedores'
 import { lerPreferencias, salvarPreferencias } from '@/lib/jarvis/estado'
 import type { PreferenciasJarvis } from '@/lib/jarvis/relevancia'
@@ -62,7 +62,7 @@ export function SecaoJarvis() {
 	async function gravarChave(): Promise<void> {
 		setErro(null)
 		try {
-			// A chave é gravada PARA O PROVEDOR ATIVO: a da Deploy não autentica
+			// A chave é gravada PARA O PROVEDOR ATIVO: a da OpenAI não autentica
 			// na DeepSeek, e guardar uma só fazia o app falhar com "recusada".
 			await salvarChaveApi(chave, provedor, db)
 			setSalva(true)
@@ -111,21 +111,21 @@ export function SecaoJarvis() {
 							<span className="linha-ajuste__titulo">Provedor</span>
 							<span className="linha-ajuste__descricao">{PROVEDORES[provedor].nota}</span>
 						</span>
-						<div className="opcoes-criacao" role="group" aria-label="Provedor de IA">
-							{LISTA_DE_PROVEDORES.map((opcao) => (
+						<div className="segmentado segmentado--quebra" role="group" aria-label="Provedor de IA">
+							{(Object.keys(PROVEDORES) as IdProvedor[]).map((qual) => (
 								<button
-									key={opcao.id}
+									key={qual}
 									type="button"
-									className="opcao-criacao"
-									aria-pressed={provedor === opcao.id}
-									onClick={() => void trocarProvedor(opcao.id)}
+									className="segmentado__item"
+									aria-pressed={provedor === qual}
+									/* O rótulo curto cabe na fileira; o nome completo vai
+									   no rótulo acessível, para quem usa leitor de tela
+									   continuar ouvindo "OpenAI (ChatGPT)". */
+									aria-label={PROVEDORES[qual].nome}
+									title={PROVEDORES[qual].nome}
+									onClick={() => void trocarProvedor(qual)}
 								>
-									<span className="opcao-criacao__texto">
-										<span className="opcao-criacao__titulo">{opcao.nome}</span>
-										<span className="opcao-criacao__descricao">
-											{provedor === opcao.id ? opcao.nota : opcao.ondePegarChave}
-										</span>
-									</span>
+									{PROVEDORES[qual].curto}
 								</button>
 							))}
 						</div>
@@ -152,7 +152,7 @@ export function SecaoJarvis() {
 							<input
 								type="password"
 								autoComplete="off"
-								placeholder="Cole a chave da API…"
+								placeholder="sk-…"
 								value={chave}
 								aria-label={`Chave da ${PROVEDORES[provedor].nome}`}
 								onChange={(evento) => setChave(evento.target.value)}

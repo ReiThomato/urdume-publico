@@ -147,6 +147,22 @@ export interface BatimentoDoRunner {
 	versao: number
 }
 
+/**
+ * Apaga o estado que o runner guardou em SharedPreferences.
+ *
+ * Fica fora do IndexedDB, então "apagar tudo" não o alcança. Sem esta limpeza,
+ * o runner continuaria com a agenda de um banco que não existe mais.
+ */
+export async function limparRetratoDoRunner(): Promise<void> {
+	if (!ehNativo()) return
+	await comPreferences(async (prefs) => {
+		await prefs.remove({ key: CHAVE_RETRATO })
+		await prefs.remove({ key: CHAVE_PLANO })
+		await prefs.remove({ key: CHAVE_AGENDA })
+		await prefs.remove({ key: 'jarvis.config' })
+	})
+}
+
 export async function lerBatimentoDoRunner(): Promise<BatimentoDoRunner | null> {
 	const bruto = await ler<BatimentoDoRunner>('jarvis.runner.estado')
 	if (!bruto || typeof bruto.em !== 'number') return null

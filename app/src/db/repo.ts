@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from './db'
-import type { Evento, Habit, HabitLog, Marco, NexoDatabase, Page, Priority, Project, ProjectNote, Recorrencia, Reminder, Setting, Subtask, Task } from './db'
+import type { AiActionLog, AiChatMessage, AiJob, AiMemoryRow, Evento, Habit, HabitLog, JournalEntry, Marco, NexoDatabase, Priority, Project, ProjectNote, Recorrencia, Reminder, Setting, Subtask, Task, TipoTarefa } from './db'
 import { proximaOcorrencia } from './eventos'
 import { createId } from './id'
 import { registrarMudanca } from '@/lib/jarvis/diario'
@@ -29,7 +29,7 @@ const isVisible = (row: { deletedAt?: number | null }): boolean => row.deletedAt
  * o usuário acabou de salvar continua salva.
  */
 async function anunciar(
-	tipo: 'task' | 'project' | 'reminder' | 'page' | 'event' | 'habit' | 'habitLog',
+	tipo: 'task' | 'project' | 'reminder' | 'event' | 'habit' | 'habitLog',
 	id: string,
 	database: NexoDatabase,
 ): Promise<void> {
@@ -40,9 +40,25 @@ async function anunciar(
    Projetos
    -------------------------------------------------------------------------- */
 
-export interface CreateProjectInput {
+interface CreateProjectInput {
 	name: string
 	order?: number
+	/**
+	 * Campos da central de projetos.
+	 *
+	 * São opcionais porque uma "lista" simples continua sendo criada só com
+	 * nome. Mas quando o formulário pede categoria, prazo e estado, eles nascem
+	 * aqui em UMA escrita — antes `Projetos.tsx` criava e logo depois chamava
+	 * `updateProject`, e o registro passava um instante incompleto pelo banco.
+	 */
+	color?: string | null
+	icone?: string | null
+	descricao?: string | null
+	prazo?: string | null
+	status?: Project['status']
+	etapa?: string | null
+	categoria?: string | null
+	priority?: Priority
 }
 
 export async function createProject(input: CreateProjectInput, database: NexoDatabase = db): Promise<Project> {
@@ -55,6 +71,14 @@ export async function createProject(input: CreateProjectInput, database: NexoDat
 		name,
 		archived: false,
 		order: input.order ?? timestamp,
+		color: input.color ?? null,
+		icone: input.icone ?? null,
+		descricao: input.descricao ?? null,
+		prazo: input.prazo ?? null,
+		status: input.status ?? 'ativo',
+		etapa: input.etapa ?? null,
+		categoria: input.categoria ?? null,
+		priority: input.priority ?? 0,
 		createdAt: timestamp,
 		updatedAt: timestamp,
 	}
@@ -73,25 +97,83 @@ export async function updateProject(
 	await anunciar('project', id, database)
 }
 
+/**
+ * Exclusão suave de um projeto e do que pertence a ele.
+ *
+ * O texto da confirmação promete "tarefas, marcos, anotações, páginas e
+ * eventos" — e `projectNotes` ficava de fora: as anotações continuavam no banco
+ * apontando para um projeto invisível. Agora elas seguem o mesmo destino
+ * (também com exclusão suave, então o desfazer restaura tudo junto).
+ *
+ * O anúncio dos eventos fica FORA da transação de propósito: `anunciar` grava
+ * no `aiJournal`, que não está no escopo da transação e fazia a escrita do
+ * diário falhar em silêncio (o `catch` de `registrarMudanca` engolia).
+ */
 export async function softDeleteProject(id: string, database: NexoDatabase = db): Promise<void> {
 	const timestamp = now()
+	let eventos: Evento[] = []
+
 	await database.transaction(
 		'rw',
-		database.projects,
-		database.tasks,
-		database.pages,
-		database.events,
+		[
+			database.projects,
+			database.tasks,
+			database.events,
+			database.projectNotes,
+		],
 		async () => {
 			await database.projects.update(id, { deletedAt: timestamp, updatedAt: timestamp })
-			// Tarefas, páginas e eventos do projeto seguem o mesmo destino, para
-			// não ficarem órfãos apontando para uma lista que não existe mais.
+			// Tarefas, páginas, anotações e eventos do projeto seguem o mesmo
+			// destino, para não ficarem órfãos apontando para uma lista que não
+			// existe mais.
 			await database.tasks.where('projectId').equals(id).modify({ deletedAt: timestamp, updatedAt: timestamp })
-			await database.pages.where('projectId').equals(id).modify({ deletedAt: timestamp, updatedAt: timestamp })
-			const eventos = await database.events.where('projectId').equals(id).toArray()
+			await database.projectNotes
+				.where('projectId')
+				.equals(id)
+				.modify({ deletedAt: timestamp, updatedAt: timestamp })
+			eventos = await database.events.where('projectId').equals(id).toArray()
 			await database.events.where('projectId').equals(id).modify({ deletedAt: timestamp, updatedAt: timestamp })
-			for (const evento of eventos) await anunciar('event', evento.id, database)
 		},
 	)
+
+	// Fora da transação: o diário é outra tabela e não participa dela.
+	for (const evento of eventos) await anunciar('event', evento.id, database)
+	await anunciar('project', id, database)
+}
+
+/**
+ * Desfaz a exclusão de um projeto e de tudo que desceu com ele.
+ *
+ * A janela é de poucos segundos (o desfazer da faixa), então "restaurar tudo
+ * que está apagado dentro deste projeto" é o comportamento que o usuário
+ * espera: ele acabou de ver o projeto inteiro desaparecer e quer o projeto
+ * inteiro de volta.
+ */
+export async function restaurarProject(id: string, database: NexoDatabase = db): Promise<void> {
+	const timestamp = now()
+	let eventos: Evento[] = []
+
+	await database.transaction(
+		'rw',
+		[
+			database.projects,
+			database.tasks,
+			database.events,
+			database.projectNotes,
+		],
+		async () => {
+			await database.projects.update(id, { deletedAt: null, updatedAt: timestamp })
+			await database.tasks.where('projectId').equals(id).modify({ deletedAt: null, updatedAt: timestamp })
+			await database.projectNotes
+				.where('projectId')
+				.equals(id)
+				.modify({ deletedAt: null, updatedAt: timestamp })
+			eventos = await database.events.where('projectId').equals(id).toArray()
+			await database.events.where('projectId').equals(id).modify({ deletedAt: null, updatedAt: timestamp })
+		},
+	)
+
+	for (const evento of eventos) await anunciar('event', evento.id, database)
 	await anunciar('project', id, database)
 }
 
@@ -104,9 +186,10 @@ export async function listProjects(database: NexoDatabase = db): Promise<Project
    Tarefas
    -------------------------------------------------------------------------- */
 
-export interface CreateTaskInput {
+interface CreateTaskInput {
 	title: string
 	projectId?: string | null
+	tipo?: TipoTarefa
 	notes?: string | null
 	dueDate?: string | null
 	deadline?: string | null
@@ -137,6 +220,7 @@ export async function createTask(input: CreateTaskInput, database: NexoDatabase 
 		id: createId(),
 		title,
 		projectId: input.projectId ?? null,
+		tipo: input.tipo ?? 'tarefa',
 		notes: input.notes ?? null,
 		dueDate: texto(input.dueDate),
 		deadline: texto(input.deadline),
@@ -194,23 +278,6 @@ export async function toggleSubtask(taskId: string, subtaskId: string, database:
 	)
 
 	await database.tasks.update(taskId, { subtasks, updatedAt: timestamp })
-	await anunciar('task', taskId, database)
-}
-
-export async function updateSubtask(
-	taskId: string,
-	subtaskId: string,
-	title: string,
-	database: NexoDatabase = db,
-): Promise<void> {
-	const texto = title.trim()
-	if (!texto) return
-
-	const tarefa = await database.tasks.get(taskId)
-	if (!tarefa) return
-
-	const subtasks = (tarefa.subtasks ?? []).map((sub) => (sub.id === subtaskId ? { ...sub, title: texto } : sub))
-	await database.tasks.update(taskId, { subtasks, updatedAt: now() })
 	await anunciar('task', taskId, database)
 }
 
@@ -320,7 +387,7 @@ export async function listTasksByDay(day: string, database: NexoDatabase = db): 
 	return rows.filter(isVisible).sort((a, b) => a.order - b.order)
 }
 
-export interface DayCount {
+interface DayCount {
 	day: string
 	total: number
 	open: number
@@ -348,7 +415,7 @@ export async function countTasksByDay(from: string, to: string, database: NexoDa
    Lembretes
    -------------------------------------------------------------------------- */
 
-export interface CreateReminderInput {
+interface CreateReminderInput {
 	text: string
 	dueAt?: number | null
 	order?: number
@@ -405,80 +472,15 @@ export async function softDeleteReminder(id: string, database: NexoDatabase = db
 	await anunciar('reminder', id, database)
 }
 
+/** Desfaz a exclusão de um lembrete (a faixa de desfazer dura 4 s). */
+export async function restaurarReminder(id: string, database: NexoDatabase = db): Promise<void> {
+	await database.reminders.update(id, { deletedAt: null, updatedAt: now() })
+	await anunciar('reminder', id, database)
+}
+
 export async function listReminders(database: NexoDatabase = db): Promise<Reminder[]> {
 	const rows = await database.reminders.toArray()
 	return rows.filter(isVisible).sort((a, b) => a.order - b.order)
-}
-
-/* --------------------------------------------------------------------------
-   Páginas
-   -------------------------------------------------------------------------- */
-
-export interface CreatePageInput {
-	title: string
-	projectId?: string | null
-	order?: number
-}
-
-export async function createPage(input: CreatePageInput, database: NexoDatabase = db): Promise<Page> {
-	const title = input.title.trim()
-	if (!title) throw new Error('O título da página é obrigatório.')
-
-	const timestamp = now()
-	const page: Page = {
-		id: createId(),
-		title,
-		projectId: input.projectId ?? null,
-		snapshot: null,
-		order: input.order ?? timestamp,
-		createdAt: timestamp,
-		updatedAt: timestamp,
-	}
-
-	await database.pages.add(page)
-	await anunciar('page', page.id, database)
-	return page
-}
-
-export async function updatePage(
-	id: string,
-	patch: Partial<Omit<Page, 'id' | 'createdAt'>>,
-	database: NexoDatabase = db,
-): Promise<void> {
-	await database.pages.update(id, { ...patch, updatedAt: now() })
-	await anunciar('page', id, database)
-}
-
-export async function savePageSnapshot(
-	id: string,
-	snapshot: string,
-	database: NexoDatabase = db,
-	thumbnail?: string | null,
-): Promise<void> {
-	await database.pages.update(id, {
-		snapshot,
-		...(thumbnail !== undefined ? { thumbnail } : {}),
-		updatedAt: now(),
-	})
-	// O snapshot do quadro entra na fila como o resto: é o que leva o desenho
-	// para o outro aparelho.
-	await anunciar('page', id, database)
-}
-
-export async function softDeletePage(id: string, database: NexoDatabase = db): Promise<void> {
-	const timestamp = now()
-	await database.pages.update(id, { deletedAt: timestamp, updatedAt: timestamp })
-	await anunciar('page', id, database)
-}
-
-export async function listPages(database: NexoDatabase = db): Promise<Page[]> {
-	const rows = await database.pages.toArray()
-	return rows.filter(isVisible).sort((a, b) => b.updatedAt - a.updatedAt)
-}
-
-export async function getPage(id: string, database: NexoDatabase = db): Promise<Page | undefined> {
-	const page = await database.pages.get(id)
-	return page && isVisible(page) ? page : undefined
 }
 
 /* --------------------------------------------------------------------------
@@ -499,14 +501,47 @@ export async function setSetting(key: string, value: unknown, database: NexoData
    Backup — JSON único, restaurável
    -------------------------------------------------------------------------- */
 
+/**
+ * Identificador do formato de backup.
+ *
+ * Era `nexo` e passou a ser `urdume` junto com o nome do app. A leitura aceita
+ * OS DOIS: um backup salvo na semana passada tem `nexo`, e recusá-lo seria a
+ * pior quebra possível — o usuário exportou justamente para não perder nada.
+ *
+ * A escrita usa sempre o novo. Ver `appDoBackup`.
+ */
+export type AppDoBackup = 'urdume' | 'nexo'
+
+/** O que o app escreve hoje no arquivo exportado. */
+export const APP_DO_BACKUP: AppDoBackup = 'urdume'
+
+/**
+ * Confere se o campo `app` de um arquivo é deste app.
+ *
+ * `rabisco` também é aceito: é o nome mais antigo, anterior ao Nexo, e existem
+ * arquivos exportados com ele. Os três nomes são o MESMO app em épocas
+ * diferentes; aceitar o passado é o que permite restaurar dado antigo.
+ */
+export function ehBackupDoApp(valor: unknown): valor is AppDoBackup {
+	return valor === 'urdume' || valor === 'nexo' || valor === 'rabisco'
+}
+
 export interface NexoBackup {
-	app: 'nexo'
+	app: AppDoBackup
+	/**
+	 * Formato do arquivo. Continua `1`.
+	 *
+	 * O estado do Jarvis entrou como CAMPO OPCIONAL, sem subir o número: um
+	 * retrato v1 com os campos novos é lido por um app antigo (que ignora o que
+	 * não conhece), e um arquivo antigo continua válido aqui. Subir para 2
+	 * obrigaria a recusar arquivos e a mudar o protocolo da sincronização, que
+	 * compartilha este mesmo formato — troca cara para um ganho nenhum.
+	 */
 	version: 1
 	exportedAt: number
 	projects: Project[]
 	tasks: Task[]
 	reminders: Reminder[]
-	pages: Page[]
 	events: Evento[]
 	habits: Habit[]
 	habitLogs: HabitLog[]
@@ -519,6 +554,31 @@ export interface NexoBackup {
 	 * usuário salvou na semana passada — o pior tipo de quebra.
 	 */
 	projectNotes?: ProjectNote[]
+
+
+	/**
+	 * Estado do Jarvis — campos opcionais, presentes só no backup exportado
+	 * pela tela de Dados (o retrato da sincronização NÃO os carrega).
+	 *
+	 * Sem isto, trocar de aparelho devolvia um assistente sem memória: o que ele
+	 * aprendeu (`aiMemory`), a conversa (`aiChat`), os gatilhos (`aiJobs`) e o
+	 * histórico de ações desfazíveis (`aiActions`) sumiam sem aviso.
+	 *
+	 * A AUSÊNCIA do campo significa "não mexe", nunca "apaga": é o que permite
+	 * que o ciclo de sincronização (que monta o retrato sem estas chaves) não
+	 * zere o Jarvis local a cada 15 minutos.
+	 *
+	 * Ficam de fora, por decisão de segurança: `aiSecrets` (a chave da API e o
+	 * token de sync nunca vão para um JSON que o usuário pode mandar por
+	 * e-mail) e `aiRuns` (contabilidade de gasto do aparelho, não dado dele).
+	 * `aiJournal` entra podado: é o que permite recuperar o "antes" de um
+	 * conflito de sincronização, mas cresce para sempre.
+	 */
+	aiMemory?: AiMemoryRow[]
+	aiChat?: AiChatMessage[]
+	aiJobs?: AiJob[]
+	aiActions?: AiActionLog[]
+	aiJournal?: JournalEntry[]
 }
 
 /**
@@ -529,71 +589,145 @@ export interface NexoBackup {
  * descartada porque o próximo recurso a nascer com um token no nome vazaria
  * sem ninguém notar.
  *
- * Ficam de fora: `jarvis.prefs` (vai junto, é inofensivo e útil — mas está
- * listado abaixo), qualquer `sync.*`, e a chave da API, que nem está nesta
- * tabela: mora em `aiSecrets`, que o backup não lê.
+ * Duas entradas antigas NÃO existiam no app (`blocos.v1`, `acessibilidade`):
+ * exportar não levava o layout do Início nem as preferências de acessibilidade,
+ * mesmo estando na lista. As chaves reais estão comentadas ao lado de cada uma.
+ *
+ * Ficam de fora: qualquer `sync.*` (infraestrutura de outro aparelho) e a
+ * chave da API, que nem está nesta tabela: mora em `aiSecrets`, que o backup
+ * não lê.
  */
 const CHAVES_EXPORTAVEIS = new Set([
 	'tema.v3',
-	'blocos.v1',
-	'acessibilidade',
+	'inicio.blocos', // era 'blocos.v1', chave que o app nunca gravou
+	'a11y.tamanho', // era 'acessibilidade', idem
+	'a11y.altoContraste',
+	'a11y.reduzirMovimento',
 	'ultimoBackup',
 	'jarvis.prefs',
 	'jarvis.ultimaAbertura',
 	'jarvis.interrupcoes',
 ])
 
-export async function exportBackup(database: NexoDatabase = db): Promise<NexoBackup> {
-	const [projects, tasks, reminders, pages, events, habits, habitLogs, settingsBruto, projectNotes] =
-		await Promise.all([
-			database.projects.toArray(),
-			database.tasks.toArray(),
-			database.reminders.toArray(),
-			database.pages.toArray(),
-			database.events.toArray(),
-			database.habits.toArray(),
-			database.habitLogs.toArray(),
-			database.settings.toArray(),
-			database.projectNotes.toArray(),
-		])
+/** Quantos dias de diário entram no arquivo exportado. */
+export const DIAS_DE_DIARIO_NO_BACKUP = 30
+
+export interface OpcoesDoBackup {
+	/**
+	 * Inclui o estado do Jarvis (memória, conversa, gatilhos, ações, diário).
+	 *
+	 * O padrão é `true`, porque é isso que a tela de Dados precisa para trocar
+	 * de aparelho sem perder o que o assistente aprendeu.
+	 *
+	 * A SINCRONIZAÇÃO passa `false`: o retrato sobe para um servidor de
+	 * arquivos e não pode levar a conversa nem a memória do Jarvis — o mesmo
+	 * motivo pelo qual a chave da API fica em `aiSecrets`, fora do backup.
+	 */
+	incluirJarvis?: boolean
+}
+
+export async function exportBackup(
+	database: NexoDatabase = db,
+	opcoes: OpcoesDoBackup = {},
+): Promise<NexoBackup> {
+	const incluirJarvis = opcoes.incluirJarvis ?? true
+
+	const [
+		projects,
+		tasks,
+		reminders,
+		events,
+		habits,
+		habitLogs,
+		settingsBruto,
+		projectNotes,
+		aiMemory,
+		aiChat,
+		aiJobs,
+		aiActions,
+		aiJournal,
+	] = await Promise.all([
+		database.projects.toArray(),
+		database.tasks.toArray(),
+		database.reminders.toArray(),
+		database.events.toArray(),
+		database.habits.toArray(),
+		database.habitLogs.toArray(),
+		database.settings.toArray(),
+		database.projectNotes.toArray(),
+		incluirJarvis ? database.aiMemory.toArray() : Promise.resolve([]),
+		incluirJarvis ? database.aiChat.toArray() : Promise.resolve([]),
+		incluirJarvis ? database.aiJobs.toArray() : Promise.resolve([]),
+		incluirJarvis ? database.aiActions.toArray() : Promise.resolve([]),
+		// O diário é a única tabela que cresce sem limite (cada toque grava uma
+		// linha). Vai podado: 30 dias é o que basta para recuperar o "antes" de
+		// um conflito recente, e é o que impede o backup de virar megabytes.
+		incluirJarvis
+			? database.aiJournal
+					.where('em')
+					.aboveOrEqual(now() - DIAS_DE_DIARIO_NO_BACKUP * 86_400_000)
+					.toArray()
+			: Promise.resolve([]),
+	])
 
 	// Filtro obrigatório: aqui não passa nada que não esteja na lista.
 	const settings = settingsBruto.filter((linha) => CHAVES_EXPORTAVEIS.has(linha.key))
 
-	return {
-		app: 'nexo',
+	const backup: NexoBackup = {
+		app: APP_DO_BACKUP,
 		version: 1,
 		exportedAt: now(),
 		projects,
 		tasks,
 		reminders,
-		pages,
 		events,
 		habits,
 		habitLogs,
 		settings,
 		projectNotes,
 	}
+
+	// Os campos do Jarvis só existem quando foram pedidos. A presença deles é o
+	// que faz `importBackup` substituir o assistente; a ausência preserva o que
+	// o aparelho já tem (é o que o ciclo de sincronização faz).
+	if (incluirJarvis) {
+		backup.aiMemory = aiMemory
+		backup.aiChat = aiChat
+		backup.aiJobs = aiJobs
+		backup.aiActions = aiActions
+		backup.aiJournal = aiJournal
+	}
+
+	return backup
 }
 
 function isBackup(value: unknown): value is NexoBackup {
 	if (typeof value !== 'object' || value === null) return false
 	const candidate = value as Partial<NexoBackup>
 	return (
-		candidate.app === 'nexo' &&
+		ehBackupDoApp(candidate.app) &&
 		candidate.version === 1 &&
 		Array.isArray(candidate.projects) &&
 		Array.isArray(candidate.tasks) &&
-		Array.isArray(candidate.reminders) &&
-		Array.isArray(candidate.pages)
+		Array.isArray(candidate.reminders)
 	)
 }
 
-/** Substitui todo o conteúdo local pelo backup. Lança se o arquivo não for do Nexo. */
+/** Substitui todo o conteúdo local pelo backup. Lança se o arquivo não for do Urdume. */
 export async function importBackup(data: unknown, database: NexoDatabase = db): Promise<void> {
 	if (!isBackup(data)) throw new Error('Arquivo de backup inválido ou de versão incompatível.')
 
 	const settings = data.settings ?? []
+	// A presença das listas, e não o número da versão, decide se o Jarvis é
+	// substituído. Um retrato vindo da sincronização tem o formato novo mas não
+	// carrega o estado do assistente (memória e conversa são do aparelho): sem
+	// essa checagem, cada ciclo apagaria o que este aparelho aprendeu.
+	const temJarvis =
+		data.aiMemory !== undefined ||
+		data.aiChat !== undefined ||
+		data.aiJobs !== undefined ||
+		data.aiActions !== undefined ||
+		data.aiJournal !== undefined
 
 	await database.transaction(
 		'rw',
@@ -601,19 +735,22 @@ export async function importBackup(data: unknown, database: NexoDatabase = db): 
 			database.projects,
 			database.tasks,
 			database.reminders,
-			database.pages,
 			database.events,
 			database.habits,
 			database.habitLogs,
 			database.settings,
 			database.projectNotes,
+			database.aiMemory,
+			database.aiChat,
+			database.aiJobs,
+			database.aiActions,
+			database.aiJournal,
 		],
 		async () => {
 			await Promise.all([
 				database.projects.clear(),
 				database.tasks.clear(),
 				database.reminders.clear(),
-				database.pages.clear(),
 				database.events.clear(),
 				database.habits.clear(),
 				database.habitLogs.clear(),
@@ -622,7 +759,6 @@ export async function importBackup(data: unknown, database: NexoDatabase = db): 
 			await database.projects.bulkAdd(data.projects)
 			await database.tasks.bulkAdd(data.tasks)
 			await database.reminders.bulkAdd(data.reminders)
-			await database.pages.bulkAdd(data.pages)
 			await database.events.bulkAdd(data.events ?? [])
 			await database.habits.bulkAdd(data.habits ?? [])
 			await database.habitLogs.bulkAdd(data.habitLogs ?? [])
@@ -630,10 +766,34 @@ export async function importBackup(data: unknown, database: NexoDatabase = db): 
 			// significa "nenhuma", não "arquivo inválido".
 			await database.projectNotes.bulkAdd(data.projectNotes ?? [])
 
+			if (temJarvis) {
+				await Promise.all([
+					database.aiMemory.clear(),
+					database.aiChat.clear(),
+					database.aiJobs.clear(),
+					database.aiActions.clear(),
+					database.aiJournal.clear(),
+				])
+				await database.aiMemory.bulkAdd(data.aiMemory ?? [])
+				await database.aiChat.bulkAdd(data.aiChat ?? [])
+				await database.aiJobs.bulkAdd(data.aiJobs ?? [])
+				await database.aiActions.bulkAdd(data.aiActions ?? [])
+				// O diário tem chave auto-incremento (`seq`): sem tirá-la, o
+				// `bulkAdd` tentaria gravar o mesmo `seq` de origem e poderia
+				// colidir com linhas locais. O Dexie aceita omitido.
+				await database.aiJournal.bulkAdd(
+					(data.aiJournal ?? []).map(({ seq: _seq, ...resto }) => resto),
+				)
+			}
+
 			// A tabela settings mistura preferências com infraestrutura de sync
 			// (fila `mut:*`, revisões `rev:*`, `sync.*`). Restaurar essas chaves
 			// fazia este aparelho herdar host, token e ID do aparelho de origem.
 			// Preserva o que já existe de sync aqui e só troca as preferências.
+			//
+			// As revisões de sync (`rev:*`) em especial NÃO podem ser zeradas: é
+			// com elas que o motor sabe o que já subiu. Por isso a lista de
+			// preservadas é lida ANTES e a escrita só toca nas preferências.
 			const syncKeys = new Set(
 				(await database.settings.toArray())
 					.filter((linha) => linha.key.startsWith('sync.') || linha.key.startsWith('mut:') || linha.key.startsWith('rev:'))
@@ -652,10 +812,6 @@ export function useProjects(): Project[] | undefined {
 	return useLiveQuery(() => listProjects(), [])
 }
 
-export function usePages(): Page[] | undefined {
-	return useLiveQuery(() => listPages(), [])
-}
-
 export function useReminders(): Reminder[] | undefined {
 	return useLiveQuery(() => listReminders(), [])
 }
@@ -672,11 +828,6 @@ export function useAllTasks(): Task[] | undefined {
 export async function listTasksByProject(projectId: string, database: NexoDatabase = db): Promise<Task[]> {
 	const rows = await database.tasks.where('projectId').equals(projectId).toArray()
 	return rows.filter(isVisible).sort((a, b) => Number(a.done) - Number(b.done) || a.order - b.order)
-}
-
-export async function listPagesByProject(projectId: string, database: NexoDatabase = db): Promise<Page[]> {
-	const rows = await database.pages.where('projectId').equals(projectId).toArray()
-	return rows.filter(isVisible).sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 export async function getProject(id: string, database: NexoDatabase = db): Promise<Project | undefined> {
@@ -799,10 +950,6 @@ export function useTasksByProject(projectId: string): Task[] | undefined {
 	return useLiveQuery(() => listTasksByProject(projectId), [projectId])
 }
 
-export function usePagesByProject(projectId: string): Page[] | undefined {
-	return useLiveQuery(() => listPagesByProject(projectId), [projectId])
-}
-
 export function useDayCounts(from: string, to: string): Map<string, DayCount> | undefined {
 	return useLiveQuery(async () => {
 		const counts = await countTasksByDay(from, to)
@@ -827,7 +974,6 @@ export interface ResultadoBusca {
 	dia?: string
 }
 
-/** Normaliza para comparar sem acento e sem caixa. */
 export function normalizar(texto: string): string {
 	return texto
 		.normalize('NFD')
@@ -933,6 +1079,21 @@ export async function softDeleteTasks(ids: string[], database: NexoDatabase = db
 	for (const id of ids) await anunciar('task', id, database)
 }
 
+/**
+ * Desfaz a exclusão de várias tarefas (o "Limpar concluídas" com desfazer).
+ *
+ * `softDeleteTasks` já era exclusão suave; o texto dizia "não tem desfazer"
+ * enquanto o dado continuava no banco. Este par transforma o que o código já
+ * fazia em algo que o usuário alcança.
+ */
+export async function restaurarTasks(ids: string[], database: NexoDatabase = db): Promise<void> {
+	if (ids.length === 0) return
+	const timestamp = now()
+
+	await database.tasks.where('id').anyOf(ids).modify({ deletedAt: null, updatedAt: timestamp })
+	for (const id of ids) await anunciar('task', id, database)
+}
+
 /* --------------------------------------------------------------------------
    Anotações de projeto (v5)
 
@@ -945,7 +1106,7 @@ export async function softDeleteTasks(ids: string[], database: NexoDatabase = db
    contexto que sempre aparece no topo. Nada foi migrado.
    -------------------------------------------------------------------------- */
 
-export interface NovaAnotacao {
+interface NovaAnotacao {
 	projectId: string
 	title?: string | null
 	body: string
@@ -1062,4 +1223,34 @@ export async function organizarProjeto(
 /** Categorias em uso, com hook reativo para a tela de projetos. */
 export function useCategorias(): string[] {
 	return useLiveQuery(async () => listarCategorias(), []) ?? []
+}
+
+/* --------------------------------------------------------------------------
+   Lixeira — o que foi excluído e pode voltar
+   -------------------------------------------------------------------------- */
+
+/*
+ * As listas abaixo são o outro lado de `isVisible`. Sem elas, a exclusão suave
+ * era definitiva na prática: o registro ficava no banco e nenhuma tela o
+ * alcançava. A lixeira (`lib/lixeira.ts`) usa estas funções; nada aqui apaga.
+ */
+
+export async function listarTarefasExcluidas(database: NexoDatabase = db): Promise<Task[]> {
+	const linhas = await database.tasks.toArray()
+	return linhas.filter((linha) => linha.deletedAt != null).sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0))
+}
+
+export async function listarProjetosExcluidos(database: NexoDatabase = db): Promise<Project[]> {
+	const linhas = await database.projects.toArray()
+	return linhas.filter((linha) => linha.deletedAt != null).sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0))
+}
+
+export async function listarLembretesExcluidos(database: NexoDatabase = db): Promise<Reminder[]> {
+	const linhas = await database.reminders.toArray()
+	return linhas.filter((linha) => linha.deletedAt != null).sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0))
+}
+
+export async function listarEventosExcluidos(database: NexoDatabase = db): Promise<Evento[]> {
+	const linhas = await database.events.toArray()
+	return linhas.filter((linha) => linha.deletedAt != null).sort((a, b) => (b.deletedAt ?? 0) - (a.deletedAt ?? 0))
 }

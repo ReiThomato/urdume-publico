@@ -5,7 +5,7 @@ import { db } from '@/db/db'
 import { registrarAbertura } from './leitura'
 import { avaliarSePermitido, ehHoraDeTique } from './motor'
 import { podarDiario } from './diario'
-import { podarAcoes, podarConversa, podarExecucoes } from './estado'
+import { podarAcoes, podarConversa, podarExecucoes, podarMemoria } from './estado'
 import { lerPreferencias } from './estado'
 import { sincronizarSegundoPlano, rearmarAgenda } from './segundo-plano'
 import { garantirCanal } from './notificacoes'
@@ -76,6 +76,7 @@ export function useJarvisVivo(): void {
 			await podarExecucoes(prefs.guardarDias)
 			await podarConversa(prefs.guardarDias)
 			await podarAcoes(prefs.guardarDias)
+			await podarMemoria(prefs.guardarDias)
 
 			if (!vivo) return
 

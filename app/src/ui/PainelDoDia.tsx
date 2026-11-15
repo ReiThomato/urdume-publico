@@ -1,12 +1,12 @@
 import { useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/db'
-import type { Reminder, Task } from '@/db/db'
+import type { Evento, Reminder, Task } from '@/db/db'
 import { useEventosDoDia } from '@/db/use-eventos'
 import { toggleTask } from '@/db/repo'
 import { formatarDiaCurto, formatarDiaLongo, formatarHora } from '@/lib/date'
 import { estiloCor } from '@/ui/cores'
-import { IconeAdicionar, IconeCalendario, IconeHorario, IconeAlarme } from '@/ui/icones'
+import { IconeAdicionar, IconeApagar, IconeCalendario, IconeHorario, IconeAlarme } from '@/ui/icones'
 import { escrever } from '@/lib/falhas'
 
 /** Tarefas de um dia qualquer, abertas e concluídas. */
@@ -34,12 +34,31 @@ function useLembretesDoDia(dia: string): Reminder[] | undefined {
 	}, [dia])
 }
 
-export interface PainelDoDiaProps {
+interface PainelDoDiaProps {
 	/** Dia escolhido na fita (AAAA-MM-DD). */
 	dia: string
 	hoje: string
 	onEditarTarefa: (tarefa: Task) => void
 	onCriar: (dia: string) => void
+	/**
+	 * Abre o editor do evento. O painel mostra compromissos do dia e, antes,
+	 * eles não eram clicáveis: editar exigia ir à Agenda e achar a linha.
+	 */
+	onAbrirEvento?: (evento: Evento) => void
+	/** Abre o editor do lembrete (mesmo motivo do evento). */
+	onAbrirLembrete?: (lembrete: Reminder) => void
+	/**
+	 * Exclui a tarefa a partir do painel.
+	 *
+	 * O painel é a única lista de tarefas que não oferecia lixeira: para
+	 * excluir algo de outro dia era preciso abrir a tarefa e descer até o fim.
+	 */
+	onExcluirTarefa?: (tarefa: Task) => void
+	/**
+	 * Conclui a tarefa e devolve o desfazer para a tela que hospeda o painel.
+	 * Antes o painel concluía sozinho e a tarefa sumia de `abertas` sem volta.
+	 */
+	onConcluirTarefa?: (id: string, titulo: string) => void
 }
 
 /**
@@ -50,7 +69,16 @@ export interface PainelDoDiaProps {
  * compromissos, tarefas e lembretes daquele dia aparecem no próprio Início, e a
  * Agenda continua a um toque no rodapé do bloco.
  */
-export function PainelDoDia({ dia, hoje, onEditarTarefa, onCriar }: PainelDoDiaProps) {
+export function PainelDoDia({
+	dia,
+	hoje,
+	onEditarTarefa,
+	onCriar,
+	onAbrirEvento,
+	onAbrirLembrete,
+	onConcluirTarefa,
+	onExcluirTarefa,
+}: PainelDoDiaProps) {
 	const tarefas = useTarefasDoDia(dia)
 	const eventos = useEventosDoDia(dia)
 	const lembretes = useLembretesDoDia(dia)
@@ -99,19 +127,26 @@ export function PainelDoDia({ dia, hoje, onEditarTarefa, onCriar }: PainelDoDiaP
 			) : (
 				<ul className="linha-grupo">
 					{(eventos ?? []).map((evento) => (
-						<li key={evento.id} className="linha" style={estiloCor(evento.cor)}>
-							<span className="linha__icone" aria-hidden="true">
-								<IconeCalendario size={20} />
-							</span>
-							<span className="linha__corpo">
-								<span className="linha__titulo">{evento.title}</span>
-								<span className="linha__meta">
-									{evento.diaInteiro
-										? 'Dia inteiro'
-										: `${formatarHora(evento.startAt)} – ${formatarHora(evento.endAt)}`}
-									{evento.local ? ` · ${evento.local}` : ''}
+						<li key={evento.id} style={estiloCor(evento.cor)}>
+							<button
+								type="button"
+								className="linha"
+								onClick={() => onAbrirEvento?.(evento)}
+								aria-label={`Editar ${evento.title}`}
+							>
+								<span className="linha__icone" aria-hidden="true">
+									<IconeCalendario size={20} />
 								</span>
-							</span>
+								<span className="linha__corpo">
+									<span className="linha__titulo">{evento.title}</span>
+									<span className="linha__meta">
+										{evento.diaInteiro
+											? 'Dia inteiro'
+											: `${formatarHora(evento.startAt)} – ${formatarHora(evento.endAt)}`}
+										{evento.local ? ` · ${evento.local}` : ''}
+									</span>
+								</span>
+							</button>
 						</li>
 					))}
 
@@ -123,7 +158,10 @@ export function PainelDoDia({ dia, hoje, onEditarTarefa, onCriar }: PainelDoDiaP
 								aria-checked={false}
 								aria-label={`Concluir ${tarefa.title}`}
 								className="checkbox"
-								onClick={() => escrever(() => toggleTask(tarefa.id, true))}
+								onClick={() => {
+									if (onConcluirTarefa) onConcluirTarefa(tarefa.id, tarefa.title)
+									else escrever(() => toggleTask(tarefa.id, true))
+								}}
 							>
 								<span className="checkbox__marca" aria-hidden="true" />
 							</button>
@@ -147,20 +185,38 @@ export function PainelDoDia({ dia, hoje, onEditarTarefa, onCriar }: PainelDoDiaP
 									)}
 								</span>
 							</button>
+							{onExcluirTarefa ? (
+								<button
+									type="button"
+									className="botao-icone botao-icone--pequeno"
+									aria-label={`Excluir ${tarefa.title}`}
+									title="Excluir"
+									onClick={() => onExcluirTarefa(tarefa)}
+								>
+									<IconeApagar size={18} />
+								</button>
+							) : null}
 						</li>
 					))}
 
 					{(lembretes ?? []).map((lembrete) => (
-						<li key={lembrete.id} className="linha">
-							<span className="linha__icone" aria-hidden="true">
-								<IconeAlarme size={20} />
-							</span>
-							<span className="linha__corpo">
-								<span className="linha__titulo">{lembrete.text}</span>
-								<span className="linha__meta">
-									{lembrete.dueAt ? `Lembrete · ${formatarHora(lembrete.dueAt)}` : 'Lembrete'}
+						<li key={lembrete.id}>
+							<button
+								type="button"
+								className="linha"
+								onClick={() => onAbrirLembrete?.(lembrete)}
+								aria-label={`Editar ${lembrete.text}`}
+							>
+								<span className="linha__icone" aria-hidden="true">
+									<IconeAlarme size={20} />
 								</span>
-							</span>
+								<span className="linha__corpo">
+									<span className="linha__titulo">{lembrete.text}</span>
+									<span className="linha__meta">
+										{lembrete.dueAt ? `Lembrete · ${formatarHora(lembrete.dueAt)}` : 'Lembrete'}
+									</span>
+								</span>
+							</button>
 						</li>
 					))}
 
