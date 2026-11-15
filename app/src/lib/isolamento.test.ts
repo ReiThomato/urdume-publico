@@ -132,11 +132,15 @@ describe('o que a variante não tem', () => {
 		expect(await existe('app/src/ui/SecaoSync.tsx')).toBe(false)
 	})
 
-	it('nenhum vestígio do motor de inteligência exclusivo', async () => {
-		// O motor de memória em grafo, os pensamentos automáticos, o perfil e os
-		// insights são a parte que fica só na versão principal. Se algum deles
-		// voltar para cá, a variante deixa de ser "enxuta" — e passa a prometer
-		// um comportamento que não tem.
+	it('nenhum módulo de aprendizagem entre sessões', async () => {
+		/*
+		 * A parte que acumula conhecimento sobre o usuário fica só na versão
+		 * principal. Se um desses voltar para cá, a variante passa a prometer um
+		 * comportamento que não tem — e o texto da tela mentiria.
+		 *
+		 * Os nomes são verificados como sufixo, sem comentário explicando o que
+		 * cada um faz: este arquivo é publicado.
+		 */
 		for (const modulo of [
 			'app/src/lib/jarvis/memorias.ts',
 			'app/src/lib/jarvis/vinculos.ts',
