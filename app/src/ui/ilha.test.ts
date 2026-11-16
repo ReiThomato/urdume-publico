@@ -3,18 +3,20 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
- * A ilha do Jarvis é um OVERLAY. Regras que o código precisa manter:
+ * A ilha do Jarvis é um OVERLAY, no padrão da Ilha Dinâmica do iPhone.
+ * Regras que o código precisa manter:
  *
  * 1. **não empurra o layout** — nenhuma reserva de altura no fluxo;
- * 2. **não cobre o título** — fica abaixo do cabeçalho, não em cima;
+ * 2. **sai do TOPO da tela**, centralizada, por cima do cabeçalho — como a
+ *    notificação do iPhone. Não é uma faixa abaixo do título: isso a deixava a
+ *    70 px do topo, parecendo um cartão solto no meio da tela;
  * 3. **toque recolhe** para a gota;
  * 4. **arrasto em qualquer direção dispensa** ("Agora não");
  * 5. **botões têm prioridade** sobre os gestos.
  *
- * Este teste lê o fonte de propósito. Os defeitos 1 e 2 já aconteceram e são
- * invisíveis em teste de unidade de componente: o bug está na relação entre um
- * componente (que publica uma variável) e o CSS de outra tela (que a consome).
- * Foi assim que "ilha discreta" virou "conteúdo pulando".
+ * Este teste lê o fonte de propósito. Os defeitos 1, 2 e o "jogada para baixo"
+ * são invisíveis em teste de unidade de componente: o bug está na relação
+ * entre um componente (que publica uma variável) e o CSS de outra tela.
  */
 
 const raiz = join(import.meta.dirname, '..')
@@ -22,6 +24,15 @@ const app = readFileSync(join(raiz, 'styles/app.css'), 'utf8')
 const ilha = readFileSync(join(raiz, 'styles/ilha.css'), 'utf8')
 const componente = readFileSync(join(raiz, 'ui/IlhaDoJarvis.tsx'), 'utf8')
 const shell = readFileSync(join(raiz, 'ui/AppShell.tsx'), 'utf8')
+
+/**
+ * O CSS sem comentários.
+ *
+ * Várias asserções são "esta string NÃO aparece", e os comentários explicam o
+ * defeito antigo citando exatamente o valor proibido. Sem tirar comentário, o
+ * teste acusa a própria explicação.
+ */
+const semComentario = (texto: string): string => texto.replace(/\/\*[\s\S]*?\*\//g, '')
 
 describe('ilha não altera o layout', () => {
 	it('o cabeçalho NÃO reserva espaço para a ilha', () => {
@@ -36,22 +47,42 @@ describe('ilha não altera o layout', () => {
 		expect(componente).not.toContain('ResizeObserver')
 	})
 
-	it('a ilha é fixed e fica abaixo do cabeçalho', () => {
-		const bloco = /\.ilha-area\s*\{([\s\S]*?)\}/.exec(ilha)
+	it('a ilha sai do topo, não de baixo do cabeçalho', () => {
+		const bloco = /\.ilha-area\s*\{([\s\S]*?)\}/.exec(semComentario(ilha))
 		expect(bloco, 'não achei .ilha-area').not.toBeNull()
 
 		expect(bloco![1]).toContain('position: fixed')
-		// Abaixo do cabeçalho: usa a altura publicada por `.topo`.
-		expect(bloco![1]).toContain('--topo-h')
+
+		/*
+		 * A regressão que este teste guarda: a ilha já foi ancorada em
+		 * `safe-area + --topo-h + 6px`, ou seja, ABAIXO do cabeçalho. Ela
+		 * nasce a 70 px do topo e o usuário lê isso como "jogada para baixo".
+		 *
+		 * O correto é o topo absoluto dentro da safe area. Somar `--topo-h`
+		 * aqui é o defeito.
+		 */
+		expect(bloco![1]).not.toContain('--topo-h')
+		expect(bloco![1]).toMatch(/top:\s*calc\(env\(safe-area-inset-top\)\s*\+\s*\d+px\)/)
 	})
 
-	it('o cabeçalho publica a própria altura real', () => {
+	it('a ilha fica acima de tudo o que flutua', () => {
+		// Cabeçalho 20, barra 40, FAB 45/46, aviso 60 — a fala do Jarvis é a
+		// camada de cima, senão o lembrete do sistema cobre a notificação.
+		const bloco = /\.ilha-area\s*\{([\s\S]*?)\}/.exec(semComentario(ilha))
+		expect(bloco, 'não achei .ilha-area').not.toBeNull()
+		const z = /z-index:\s*(\d+)/.exec(bloco?.[1] ?? '')
+		expect(z, 'ilha sem z-index').not.toBeNull()
+		expect(Number(z?.[1] ?? 0)).toBeGreaterThan(60)
+	})
+
+	it('o cabeçalho continua publicando a própria altura', () => {
+		// A ilha não usa mais `--topo-h`, mas outras medidas dependem dele.
 		expect(shell).toContain("setProperty('--topo-h'")
 		expect(shell).toContain('ResizeObserver')
 	})
 
 	it('a faixa deixa o toque passar; só o cartão intercepta', () => {
-		const bloco = /\.ilha-area\s*\{([\s\S]*?)\}/.exec(ilha)
+		const bloco = /\.ilha-area\s*\{([\s\S]*?)\}/.exec(semComentario(ilha))
 		expect(bloco![1]).toContain('pointer-events: none')
 
 		const cartao = /\.ilha\s*\{([\s\S]*?)\}/.exec(ilha)

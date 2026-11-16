@@ -8,7 +8,7 @@
     <img alt="React 19" src="https://img.shields.io/badge/React-19-149ECA?logo=react&amp;logoColor=white" />
     <img alt="TypeScript 5.8" src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&amp;logoColor=white" />
     <img alt="Platform: Android and web" src="https://img.shields.io/badge/platform-Android%20%C2%B7%20web-3DDC84?logo=android&amp;logoColor=white" />
-    <img alt="Tests: 572 passing" src="https://img.shields.io/badge/tests-572%20passing-2EA043" />
+    <img alt="Tests: 587 passing" src="https://img.shields.io/badge/tests-587%20passing-2EA043" />
     <img alt="Status: beta" src="https://img.shields.io/badge/status-beta-D96C47" />
     <img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-6E7681" />
   </p>
@@ -22,7 +22,7 @@
 > language-neutral.
 
 > [!WARNING]
-> **Beta.** The app works and has 572 automated tests, but it has not seen
+> **Beta.** The app works and has 587 automated tests, but it has not seen
 > prolonged use on many devices. Expect defects. Read
 > [known limits](docs/LIMITES.md) (Portuguese) before entrusting it with your
 > data, and export a backup from time to time.
@@ -144,7 +144,7 @@ The full list, including notification delays and migration caveats, is in
 
 ### 1. Install the APK (Android 7.0+)
 
-Download `urdume-publico-0.2.0.apk` from
+Download `urdume-publico-0.2.1.apk` from
 [Releases](https://github.com/ReiThomato/urdume-publico/releases/latest) and
 open it on the phone. Android will ask permission to install from an unknown
 source. The release page publishes the SHA-256 checksum of the file.
@@ -266,11 +266,11 @@ conventions described in [docs/CONTRIBUINDO.md](docs/CONTRIBUINDO.md).
 ```bash
 cd app
 npm ci
-npm test        # 572 tests
+npm test        # 587 tests
 npx tsc -b      # type check
 ```
 
-54 test files cover the database, migrations, the assistant signals, the action
+56 test files cover the database, migrations, the assistant signals, the action
 executor and its undo, batches, the three provider dialects, APK hygiene and the
 isolation of this variant. Automated tests cover logic, not the behaviour of
 Android on every manufacturer — see the beta warning above.

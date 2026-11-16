@@ -67,18 +67,34 @@ const LIMIAR_DISPENSA = 56
 
 /**
  * O robô. SVG em vez de imagem: acompanha o tema e anima o visor sem sprite.
+ *
+ * ## Por que ele é feito de grupos
+ *
+ * Cada movimento precisa de um eixo próprio, e no SVG um `transform` no mesmo
+ * elemento substitui o outro — duas animações no mesmo nó brigam. Os grupos
+ * resolvem: o de fora flutua (translateY), o de dentro inclina a cabeça
+ * (rotate) e o visor pisca (scaleX). Sem isso, inclinar a cabeça matava a
+ * flutuação.
+ *
+ * O `brilho` é um círculo maior, atrás da ponta da antena, que pisca em
+ * vermelho de vez em quando — é o LED do robô, não um alarme.
  */
 function Robo() {
 	return (
 		<svg className="ilha__avatar" viewBox="0 0 40 40" aria-hidden="true" focusable="false">
-			<path
-				className="ilha__avatar-cabeca"
-				d="M20 6.2c-6.4 0-11.4 4.8-11.4 10.8v6.4c0 6 5 10.8 11.4 10.8s11.4-4.8 11.4-10.8v-6.4C31.4 11 26.4 6.2 20 6.2Z"
-			/>
-			<rect className="ilha__avatar-visor" x="12.8" y="14.6" width="14.4" height="8" rx="4" />
-			<path className="ilha__avatar-antena" d="M20 6.2V3.4" />
-			<circle className="ilha__avatar-ponta" cx="20" cy="2.6" r="1.5" />
-			<path className="ilha__avatar-base" d="M15 34.2h10" />
+			<g className="ilha__avatar-corpo">
+				<g className="ilha__avatar-cabeca-grupo">
+					<path
+						className="ilha__avatar-cabeca"
+						d="M20 6.2c-6.4 0-11.4 4.8-11.4 10.8v6.4c0 6 5 10.8 11.4 10.8s11.4-4.8 11.4-10.8v-6.4C31.4 11 26.4 6.2 20 6.2Z"
+					/>
+					<rect className="ilha__avatar-visor" x="12.8" y="14.6" width="14.4" height="8" rx="4" />
+					<path className="ilha__avatar-antena" d="M20 6.2V3.4" />
+					<circle className="ilha__avatar-brilho" cx="20" cy="2.6" r="3.6" />
+					<circle className="ilha__avatar-ponta" cx="20" cy="2.6" r="1.5" />
+				</g>
+				<path className="ilha__avatar-base" d="M15 34.2h10" />
+			</g>
 		</svg>
 	)
 }
@@ -120,6 +136,23 @@ export function IlhaDoJarvis({
 		[onDispensar],
 	)
 
+	/**
+	 * O robô "acorda": um gesto só de cabeça e um pulo curto.
+	 *
+	 * Vale em dois momentos, e os dois são o mesmo pedido do usuário: quando
+	 * chega recado (o cartão abre sozinho) e quando ELE abre a gota. Antes o
+	 * segundo caso não animava nada — a gota estalava para cartão estático.
+	 *
+	 * O timer é único e sempre reiniciado, para dois toques seguidos não
+	 * deixarem a classe presa.
+	 */
+	const acordarRef = useRef<number | undefined>(undefined)
+	const acordar = useCallback(() => {
+		setPensando(true)
+		if (acordarRef.current != null) window.clearTimeout(acordarRef.current)
+		acordarRef.current = window.setTimeout(() => setPensando(false), 950)
+	}, [])
+
 	const rearmarRelogio = useCallback(() => {
 		if (timer.current != null) window.clearTimeout(timer.current)
 		if (duracaoMs <= 0) return
@@ -135,13 +168,11 @@ export function IlhaDoJarvis({
 		setSaindo(false)
 		setDeslocamento({ x: 0, y: 0 })
 		setRecolhida(false)
-		setPensando(true)
-
-		const acordar = window.setTimeout(() => setPensando(false), 900)
+		acordar()
 		rearmarRelogio()
 
 		return () => {
-			window.clearTimeout(acordar)
+			if (acordarRef.current != null) window.clearTimeout(acordarRef.current)
 			if (timer.current != null) window.clearTimeout(timer.current)
 		}
 		// O id é a identidade: com o objeto, a releitura de 20 s reanimava o
@@ -180,6 +211,7 @@ export function IlhaDoJarvis({
 					aria-label={`Jarvis: ${atual.mensagem}. Toque para abrir.`}
 					onClick={() => {
 						setRecolhida(false)
+						acordar()
 						rearmarRelogio()
 					}}
 				>

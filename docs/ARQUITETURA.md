@@ -95,6 +95,10 @@ editor e as ações `criar_pagina` e `escrever_no_quadro` da IA saíram junto. U
 teste varre o código atrás de import residual e outro recusa a volta dos
 módulos.
 
+**A ilha sai do topo.** Ela é posicionada no topo absoluto (`safe-area + 6px`),
+centralizada e acima de tudo (z-index 70), como a notificação do iPhone. Ancorar
+abaixo do cabeçalho (`--topo-h`) é o defeito que o `ui/ilha.test.ts` proíbe.
+
 **Sem sincronização e sem o motor de aprendizagem exclusivo.** Não existem aqui
 `lib/sync/` nem os módulos que acumulam conhecimento sobre o usuário entre
 sessões. O `isolamento.test.ts` verifica a ausência de cada um: se voltarem por
@@ -114,7 +118,7 @@ a fazia aparecer como vencida no dia seguinte.
 
 ## Testes
 
-`npm test` roda **572 testes** em 54 arquivos. Os que protegem decisões, não
+`npm test` roda **587 testes** em 56 arquivos. Os que protegem decisões, não
 funções:
 
 - `db/migracao.test.ts` — abrir bancos de versões antigas sem perder dado

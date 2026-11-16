@@ -9,7 +9,7 @@ descrevendo o problema — economiza tempo dos dois lados.
 cd app
 npm install
 npm run dev      # navegador, com recarga rápida
-npm test         # 572 testes
+npm test         # 587 testes
 npx tsc -b       # tipos
 ```
 

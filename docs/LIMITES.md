@@ -98,7 +98,7 @@ versão do Android e o que aconteceu.
 
 ## O que foi testado de fato
 
-- **572 testes automatizados** (`npm test`, 54 arquivos): banco, migrações,
+- **587 testes automatizados** (`npm test`, 56 arquivos): banco, migrações,
   sinais do assistente, executor e desfazer, os três dialetos de provedor,
   higiene do APK e isolamento da variante.
 - **Telas** verificadas em navegador com viewport de celular e dados de exemplo

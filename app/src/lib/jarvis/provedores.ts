@@ -301,6 +301,31 @@ export function lerConsumo(
 	return { entrada: uso?.prompt_tokens ?? 0, saida: uso?.completion_tokens ?? 0 }
 }
 
+/**
+ * Erro de rede, em linguagem do app.
+ *
+ * O navegador/WebView devolve "Failed to fetch", "NetworkError when attempting
+ * to fetch resource" ou "Load failed" — em inglês e sem dizer o que fazer. A
+ * tela mostra isso ao usuário, então traduzir é parte do trabalho.
+ *
+ * O caso mais comum de longe é CORS no navegador: o provedor recusa a chamada
+ * de outra origem e a resposta nunca chega. Por isso a mensagem aponta o APK.
+ */
+export function erroDeRede(causa: unknown, provedor: Provedor): string {
+	const bruto = causa instanceof Error ? causa.message : String(causa ?? '')
+	/*
+	 * Os textos variam por ambiente: o Chrome diz "Failed to fetch", o WebView
+	 * do Android diz "NetworkError when attempting to fetch resource", o
+	 * Safari "Load failed", e o Node (nos testes) "fetch failed". Todos são a
+	 * mesma coisa: a requisição não chegou.
+	 */
+	const rede = /failed to fetch|fetch failed|networkerror|load failed|network request failed|err_/i.test(bruto)
+
+	if (!rede) return bruto || 'Falha de rede.'
+
+	return `Não consegui falar com a ${provedor.nome}. Verifique a conexão; no navegador, o provedor pode recusar a chamada por CORS — no APK funciona.`
+}
+
 /** Mensagem de erro legível a partir do status e do corpo. */
 export function erroDoProvedor(provedor: Provedor, status: number, dados: unknown): string {
 	if (status === 401 || status === 403) {

@@ -7,6 +7,7 @@ import type { Personalidade } from './relevancia'
 import {
 	cabecalhos,
 	endpoint,
+	erroDeRede,
 	erroDoProvedor,
 	lerConsumo,
 	lerResposta,
@@ -106,7 +107,7 @@ export interface RespostaDaIA {
 	acoes: AcaoDaIA[]
 }
 
-interface ContextoDaChamada {
+export interface ContextoDaChamada {
 	retrato: Retrato
 	sinais: Sinal[]
 	/** O que o usuário pediu, se foi uma pergunta. */
@@ -534,8 +535,11 @@ export async function consultar(
 			duracaoMs,
 		}
 	} catch (causa) {
-		const mensagem = causa instanceof Error ? causa.message : 'Falha de rede.'
-		return falha(mensagem, inicio)
+		/*
+		 * `failed to fetch` e companhia são do navegador, em inglês e sem dizer
+		 * o que fazer. `erroDeRede` traduz e aponta o caminho (CORS → APK).
+		 */
+		return falha(erroDeRede(causa, provedor), inicio)
 	}
 }
 
